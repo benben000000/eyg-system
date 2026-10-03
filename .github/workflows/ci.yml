@@ -176,6 +176,30 @@ jobs:
     timeout-minutes: 8
     permissions:
       contents: read
+    # THIS JOB NEEDS A REAL DATABASE.
+    #
+    # `prisma migrate diff --from-migrations` builds the "before" state by
+    # APPLYING every migration to a shadow database, then diffs that against the
+    # datamodel. There is no way to ask that question without a Postgres to apply
+    # them to.
+    #
+    # This job declared none, so it inherited the workflow-level
+    # DATABASE_URL - postgresql://ci:ci@127.0.0.1:5432/ci - where nothing is
+    # listening. Every run got ECONNREFUSED, and the old drift step reported that
+    # error text as "schema drift". The gate had never once compared anything.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
@@ -652,14 +676,6 @@ jobs:
           path: junit.xml
           retention-days: 14
 
-      - name: Upload the coverage report
-        if: always() && steps.tests.outputs.exists == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
-        with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 14
-
       # Uploads the artifact even when there is no suite, so the run's file list
       # tells the truth about what was and was not executed.
       - name: Write a placeholder when no suite ran
@@ -669,6 +685,18 @@ jobs:
           printf '{"skipped":true,"reason":"no tests/ suite committed yet"}\n' > coverage/.no-suite.json
           echo "::notice::Coverage was not produced — there is no test suite to run yet."
 
+      # THE ONLY coverage upload in this job.
+      #
+      # There used to be two steps here — "Upload the coverage report" for the
+      # case where a suite ran, and this one, `if: always()`, for every case.
+      # Both declared the artifact name `coverage-report`, and upload-artifact@v4
+      # REFUSES a duplicate name in the same run:
+      #
+      #   Failed to CreateArtifact: Received non-retryable error:
+      #   Failed request: (409) Conflict: an artifact with this name already exists
+      #
+      # So this step failed unconditionally whenever a suite had run, which is
+      # every run since the tests landed. Two steps, one artifact name, one job.
       - name: Upload coverage (or the placeholder)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
