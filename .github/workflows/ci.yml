@@ -287,11 +287,110 @@ jobs:
 
           // Unfixable transitives we have consciously accepted.
           // Format: "<package>@<range>" -> { reason, expires }
-          const ALLOWLIST = {
-            // Example — replace with real entries. An allowlist entry that is
-            // not justified is worse than no allowlist, so start empty and
-            // only add one after reading the advisory.
-          };
+            const ALLOWLIST = {
+            // ==========================================================================
+            // ACCEPTED ADVISORIES.
+            //
+            // Every entry below was judged on REACHABILITY first: does the vulnerable code
+            // run in a request handler that an attacker on the internet can reach, or does it
+            // run on a CI runner when someone types `npm run build`? Those are not the same
+            // risk, and treating them as the same is how a real advisory gets lost in the
+            // noise of twenty dev-tool findings.
+            //
+            // All 18 remaining high advisories are BUILD-TIME or DEV-ONLY. The two that were
+            // reachable at runtime have been fixed rather than waived:
+            //
+            //   nodemailer  6.10.1 -> 10.0.13
+            //     16 advisories, several of them explicitly about delivery to an
+            //     ATTACKER-CONTROLLED DOMAIN. This shop sends booking confirmations, and a
+            //     recipient is customer-supplied input, so that was reachable and serious.
+            //
+            //   sharp  0.33.5 -> 0.35.5
+            //     libvips CVEs, reachable through /_next/image - which the gallery, the
+            //     lightbox and the before/after slider all now use.
+            //
+            // Nothing here is permanent. Each entry expires, and an expired entry FAILS the
+            // build, so these cannot quietly become a standing waiver.
+            // ==========================================================================
+
+              // ---- BUILD-TIME ONLY: runs on the deploy runner, never in a request ----
+              "@sentry/nextjs": {
+                reason: "Build/bundler chain (rollup, unplugin, chokidar). Executes during `next build`, never in a request handler. Fixed in 11.4.0, a major bump that rewrites the SDK config surface. Revisit when Next moves to 16 anyway.",
+                expires: "2027-01-01",
+              },
+              "@sentry/bundler-plugin-core": {
+                reason: "Transitive of @sentry/nextjs. Same build-time reach, same upgrade.",
+                expires: "2027-01-01",
+              },
+              "@sentry/webpack-plugin": {
+                reason: "Transitive of @sentry/nextjs. Same build-time reach, same upgrade.",
+                expires: "2027-01-01",
+              },
+              chokidar: {
+                reason: "Transitive file-watcher from the Sentry bundler plugin. Build-time only.",
+                expires: "2027-01-01",
+              },
+              rollup: {
+                reason: "Transitive of the Sentry bundler plugin. Build-time only.",
+                expires: "2027-01-01",
+              },
+              unplugin: {
+                reason: "Transitive of the Sentry bundler plugin. Build-time only.",
+                expires: "2027-01-01",
+              },
+              postcss: {
+                reason: "CSS transform during the build. npm's only offered fix is next 16, a major upgrade that cannot land the week before launch.",
+                expires: "2027-01-01",
+              },
+
+              // ---- DEV-ONLY: runs when a developer lints the docs ----
+              "markdownlint-cli2": {
+                reason: "Lints docs/*. Tested: 0.23.3 changes rule defaults and takes lint:md from 294 findings to 808, so it needs a config migration before it is a net improvement.",
+                expires: "2027-01-01",
+              },
+              braces: {
+                reason: "Transitive of markdownlint-cli2. Dev-only.",
+                expires: "2027-01-01",
+              },
+              "fast-glob": {
+                reason: "Transitive of markdownlint-cli2. Dev-only.",
+                expires: "2027-01-01",
+              },
+              globby: {
+                reason: "Transitive of markdownlint-cli2. Dev-only.",
+                expires: "2027-01-01",
+              },
+              "js-yaml": {
+                reason: "Transitive of markdownlint-cli2. Dev-only.",
+                expires: "2027-01-01",
+              },
+              micromatch: {
+                reason: "Transitive of markdownlint-cli2. Dev-only.",
+                expires: "2027-01-01",
+              },
+
+              // ---- NO FIX OFFERED THAT IS NOT A DOWNGRADE ----
+              "eslint-config-next": {
+                reason: "Lint config, dev-only. npm's only offered fix is 14.2.35, a DOWNGRADE that would drop the Next 15 rule set.",
+                expires: "2027-01-01",
+              },
+              "@next/eslint-plugin-next": {
+                reason: "Transitive of eslint-config-next. Same dev-only reach, and the same downgrade-only fix.",
+                expires: "2027-01-01",
+              },
+              prisma: {
+                reason: "CLI only; runs on the deploy runner and in the seed. npm's only offered fix is 6.12.0, a DOWNGRADE from the installed 6.19.3.",
+                expires: "2027-01-01",
+              },
+              "@prisma/config": {
+                reason: "Transitive of prisma. Same CLI-only reach, same downgrade-only fix.",
+                expires: "2027-01-01",
+              },
+              "deepmerge-ts": {
+                reason: "Transitive of @prisma/config. Cleared by the same downgrade-only fix.",
+                expires: "2027-01-01",
+              },
+            };
 
           const vulns = audit.vulnerabilities ?? {};
           const blocking = [];
@@ -307,10 +406,25 @@ jobs:
               .filter((x) => typeof x === "object")
               .map((x) => x.url)
               .filter(Boolean);
-            if (waiver) {
-              console.log(`::notice title=Accepted advisory::${name} ${severity} — ${waiver.reason} (expires ${waiver.expires})`);
-              continue;
-            }
+              if (waiver) {
+                // An expiry that is not ENFORCED is decoration: it looks like a
+                // deadline and commits to nothing. A waiver past its date is
+                // blocking, so the date has to mean something.
+                if (!waiver.expires) {
+                  blocking.push(`${name} ${severity} — accepted with no expiry date`);
+                  continue;
+                }
+                if (new Date(waiver.expires) < new Date()) {
+                  blocking.push(
+                    `${name} ${severity} — WAIVER EXPIRED ${waiver.expires}: ${waiver.reason}`
+                  );
+                  continue;
+                }
+                console.log(
+                  `::notice title=Accepted advisory::${name} ${severity} — ${waiver.reason} (expires ${waiver.expires})`
+                );
+                continue;
+              }
             blocking.push(`${name}@${v.range ?? "?"} ${severity}${urls.length ? ` (${urls.join(", ")})` : ""}`);
           }
 
