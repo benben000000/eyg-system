@@ -573,3 +573,52 @@ overridden except `emulatedUserAgent`, so it is inert-but-misleading rather than
 wrong. Removing it would change the emulated user agent and therefore the
 measurement, and this was not the moment to make an unmeasured change to a
 performance gate. Worth doing, with the scores before and after.
+
+### 16.5 The precise failing set, per page
+
+After the preset was removed, the run reports exactly this and nothing else. Three
+pages, two runs each, worst value shown:
+
+    assertion                      /       /services   /book     budget
+    categories:performance         0.87    0.83        0.85      >= 0.90
+    categories:seo                 0.91    0.91        0.91      >= 0.95
+    categories:accessibility       0.90    -           -         >= 0.95
+    color-contrast                 3       4           4         0
+    largest-contentful-paint       3875ms  4218ms      4164ms    <= 2500ms
+    first-contentful-paint         -       1830ms      -         <= 1800ms
+
+and three assertions failing `auditRan` — the audit did not produce a result at
+all, on some or all pages:
+
+    inspector-console              /  /services  /book
+    interaction-to-next-paint      /  /services  /book
+    no-robots-txt                  -   -          /book
+
+**The four category/metric failures are the site.** They are real, they are
+measured, and the thresholds were left alone. Fixing them means front-end work:
+contrast ratios on 3-4 elements per page, and an LCP of ~4s against a 2.5s budget
+on a simulated slow-4G connection with a 4x CPU slowdown.
+
+**The three `auditRan` failures are a different question** and are deliberately not
+changed here. An assertion of `minScore: 1` on `auditRan` says "this audit must
+have run", so these are statements about the harness:
+
+  * `interaction-to-next-paint` — INP measures the delay of the next interaction.
+    LHCI performs no interaction, so there is nothing to measure. This budget
+    demands a metric the harness is not equipped to produce, and it will fail the
+    same way forever regardless of the site.
+  * `inspector-console` — needs the DevTools protocol attached; it did not run here.
+  * `no-robots-txt` — failed for `/book` and passed for the other two pages on the
+    SAME ORIGIN, where the same `/robots.txt` is served. A per-URL difference on a
+    shared resource is a race, not a site defect.
+
+They are recorded rather than removed because the fix cannot be verified on this
+machine — there is no Chrome, so `auditRan` cannot be exercised locally — and
+because dropping an assertion is the one move in this file that cannot be
+distinguished from making the gate pass. Each needs one confirming run with the
+assertion removed and the audit's own report inspected.
+
+So the state of the performance gate is: **harness faults fixed, site defects
+measured and outstanding, three assertions of unproven satisfiability flagged.**
+The deploy guard stays red until the four real ones are addressed, which is what it
+is for.
