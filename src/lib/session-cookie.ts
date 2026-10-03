@@ -20,6 +20,33 @@ export const CSRF_HEADER = "x-csrf-token";
 /** Header the CSP nonce is published on, so `headers()` in the layout can read it. */
 export const NONCE_HEADER = "x-nonce";
 
+/**
+ * Endpoints whose entire purpose is to be polled by an automated agent: the
+ * container HEALTHCHECK, an uptime monitor, a load balancer, an operator's
+ * `curl`.
+ *
+ * The exemption from the middleware's bot damping is explicit here rather than
+ * inherited from `PUBLIC_API_PREFIXES`. That list answers a different question —
+ * "reachable without a staff session" — and it includes `/api/booking` and
+ * `/api/quote`, which are precisely what the scraper block exists to protect.
+ * Reusing it would reopen both to scrapers in exchange for fixing the probes.
+ *
+ * Why this is not only a CI problem. `wget/`, `curl/`, `python-requests` and
+ * `node-fetch` are all in the middleware's scraper list, so with no exemption the
+ * health endpoints answered 403 to every non-browser caller. The container image
+ * could therefore never report healthy, and no external monitor could have told
+ * whether the shop was up. An endpoint you cannot poll is not a health check.
+ *
+ * Neither endpoint exposes customer data: `/api/health` touches nothing but the
+ * process, and `/api/ready` reports readiness.
+ */
+export const PROBE_API_PATHS = ["/api/health", "/api/ready"] as const;
+
+/** True for the health and readiness probes, and nothing else. */
+export function isProbeApi(pathname: string): boolean {
+  return PROBE_API_PATHS.some((p) => pathname === p);
+}
+
 /** Endpoints that must stay reachable without a staff session. */
 export const PUBLIC_API_PREFIXES = [
   "/api/availability",

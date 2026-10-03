@@ -26,7 +26,7 @@ import type { NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { REQUEST_ID_HEADER, clientIp, resolveRequestId } from "@/lib/request";
-import { ADMIN_PREFIXES, CSRF_COOKIE, NONCE_HEADER, PUBLIC_API_PREFIXES, SESSION_COOKIE, STATIC_ASSET_RE } from "@/lib/session-cookie";
+import { ADMIN_PREFIXES, CSRF_COOKIE, NONCE_HEADER, PUBLIC_API_PREFIXES, SESSION_COOKIE, STATIC_ASSET_RE, isProbeApi } from "@/lib/session-cookie";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -312,7 +312,14 @@ export function middleware(req: NextRequest): NextResponse {
 
   // 2. Bot damping. Scrapers get a hard 403 on the API so they cannot burn
   //    database connections; real browsers are untouched.
-  if (isApi && isLikelyScraper(ua)) {
+  //
+  //    `/api/health` and `/api/ready` are exempt, and the exemption is
+  //    deliberately narrow — see PROBE_API_PATHS. `wget/`, `curl/` and
+  //    `python-requests` are all in the list below, so without this the
+  //    container's own HEALTHCHECK is answered with a 403 and the image can
+  //    never report healthy. Same for every uptime monitor and load balancer
+  //    that probes over HTTP rather than pretending to be a browser.
+  if (isApi && !isProbeApi(pathname) && isLikelyScraper(ua)) {
     log.warn("bot.blocked", { ip, reason: "scraper_ua" });
     return problem(403, "FORBIDDEN", "Automated access is not allowed.", requestId);
   }
