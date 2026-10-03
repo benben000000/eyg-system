@@ -132,10 +132,36 @@ export default async function RootLayout({
       suppressHydrationWarning
       className={`${saira.variable} ${barlow.variable}`}
     >
-      <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
-      </head>
+      {/* The App Router owns `<head>`. This layout used to render its own, to hold
+       * the theme bootstrap script, which is not a supported thing to do — so it is
+       * gone and the script moved to the top of `<body>`, where an inline script
+       * still runs before any visible content is parsed. The CSP nonce is
+       * unaffected.
+       *
+       * This did NOT fix the metadata placement, and the reason is worth writing
+       * down because two plausible explanations have already been measured and
+       * ruled out:
+       *
+       *   `<title>`, `<meta name="description">`, `<link rel="canonical">` and the
+       *   Open Graph tags are all rendered in the BODY, at the end of the
+       *   document, where `document.head` cannot see them. Lighthouse scores
+       *   `meta-description` 0 for exactly that reason, and SEO sits at 91 with no
+       *   individual SEO audit failing — the category has nothing to score.
+       *
+       *     measured: </head> closes at byte 2,564; <title> begins at 109,371.
+       *
+       *   Ruled out: this custom `<head>` (removing it changed nothing), and the
+       *   root `src/app/loading.tsx` Suspense boundary (removing it changed
+       *   nothing). What remains is that `await headers()` below makes every route
+       *   dynamic — there are zero prerendered `.html` files — so every response
+       *   streams and the metadata arrives after the last boundary resolves.
+       *
+       * The fix for that is not free: the nonce is per-request and cannot be read
+       * without `headers()`. See docs/inventory-decision-log.md.
+       *
+       * DO NOT "TIDY" THE SCRIPT BACK INTO A <head> BLOCK. */}
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         <Providers nonce={nonce}>
           <SkipLink targetId="main" />
           <TopBar status={status} />

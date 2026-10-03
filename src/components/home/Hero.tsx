@@ -185,14 +185,14 @@ export function Hero({ status }: { status: OpenStatus }): ReactElement {
             <p className="eyg-eyebrow text-brand-500">Today at the shop</p>
             <dl className="mt-4 flex flex-col gap-4">
               <div>
-                <dt className="eyg-eyebrow text-ink-400">Status</dt>
+                <dt className="eyg-eyebrow text-ink-300">Status</dt>
                 <dd className="mt-1 text-lg font-bold text-white">
                   {status.isOpen ? "Open now" : "Closed now"}
                   <span className="block text-sm font-semibold text-ink-200">{status.detail}</span>
                 </dd>
               </div>
               <div>
-                <dt className="eyg-eyebrow text-ink-400">Where</dt>
+                <dt className="eyg-eyebrow text-ink-300">Where</dt>
                 <dd className="mt-1 text-lg font-bold text-white">
                   {BUSINESS.address.street}
                   <span className="block text-sm font-semibold text-ink-200">
@@ -210,7 +210,7 @@ export function Hero({ status }: { status: OpenStatus }): ReactElement {
                */}
               {PAYMENT_METHODS.length > 0 ? (
                 <div>
-                  <dt className="eyg-eyebrow text-ink-400">Pay with</dt>
+                  <dt className="eyg-eyebrow text-ink-300">Pay with</dt>
                   <dd className="mt-2 flex flex-wrap gap-1.5">
                     {PAYMENT_METHODS.map((method) => (
                       <span

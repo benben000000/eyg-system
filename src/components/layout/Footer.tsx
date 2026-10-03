@@ -98,7 +98,7 @@ export function Footer(): React.ReactElement {
                 <span className="mt-3 block text-ink-300">{BUSINESS.address.landmark}</span>
               </address>
               <p className="mt-4 text-sm">
-                <span className="eyg-eyebrow text-ink-400">Hours</span>
+                <span className="eyg-eyebrow text-ink-300">Hours</span>
                 <br />
                 <span className="text-ink-200">{status.today}</span>
                 <br />

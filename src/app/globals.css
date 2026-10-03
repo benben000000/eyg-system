@@ -1,6 +1,45 @@
 @import "tailwindcss";
 
 /* ============================================================================
+   `dark:` MUST MEAN "THE SITE IS IN ITS DARK THEME", NOT "THE OS IS DARK"
+   ============================================================================
+   This one line was worth 43 broken call sites.
+
+   The theme is chosen by the user and applied as `data-theme` on <html> — the
+   bootstrap script at the top of the body sets it, defaulting to `dark`, and the
+   visitor can override it. But Tailwind's `dark:` variant keys off
+   `prefers-color-scheme`, the OS setting. Two different mechanisms.
+
+   They agree only by accident, and in CI they did not agree at all:
+
+     headless Chrome reports prefers-color-scheme: light
+     the site is in its dark theme (the default)
+
+   So NO `dark:` utility applied, on any of the 43 sites that use one. Every one
+   of them is written in the shape
+
+     bg-brand-50 text-brand-900 dark:bg-brand-900/25 dark:text-brand-100
+
+   which is light-mode styling with a dark-mode override. With the override
+   switched off, the light-mode half rendered inside a dark theme, where
+   `--color-foreground` is white. Lighthouse measured the result on /book:
+
+     #ffffff on #fffaeb    1.04:1     the service selector, selected state
+
+   White text on a cream background, on the booking form's primary control, at
+   1.04:1. It was invisible.
+
+   Redefining the variant makes `dark:` mean what all 43 call sites already
+   assume, and makes the site behave for a visitor who picks light mode on a
+   dark-preferring machine — who was getting dark backgrounds with light-mode
+   text for exactly the same reason.
+
+   `[data-theme="dark"]` rather than `.dark`: this project uses the attribute, set
+   by the bootstrap script before first paint.
+   ========================================================================= */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ============================================================================
    EYG TIRE & AUTO CARE — DESIGN TOKENS
    Single source of truth. DO NOT hardcode hex values in components.
    Source: logo colour extraction from the official EYG profile mark.
@@ -166,6 +205,10 @@
     --color-border: #2a2a32;
     --color-border-strong: #3d3d47;
     --color-muted-foreground: var(--color-ink-300);
+    /* A11Y-004: `#DC2626` on `#06060A` is 4.19:1 — under AA for 14px bold, which
+       is what `text-destructive` renders at. The dark theme needs a lighter step;
+       the light theme keeps racing-600, which is correct on white. */
+    --color-destructive: var(--color-racing-400);
     --color-primary: var(--color-brand-500);
     --color-primary-foreground: var(--color-ink-950);
     --color-accent: var(--color-brand-500);
