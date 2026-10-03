@@ -20,7 +20,8 @@
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
     "lint:md": "markdownlint-cli2 \"docs/**/*.md\"",
-    "verify:invariants": "node scripts/verify-invariants.mjs"
+    "verify:invariants": "node scripts/verify-invariants.mjs",
+    "verify:secrets:baseline": "node scripts/regenerate-gitleaks-baseline.mjs"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
