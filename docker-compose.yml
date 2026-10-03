@@ -118,7 +118,7 @@ services:
       dockerfile: Dockerfile
       target: runner
       args:
-        NODE_VERSION: "20.11.0"
+        NODE_VERSION: "22.21.1"
     image: eyg-tire:local
     restart: unless-stopped
     depends_on:

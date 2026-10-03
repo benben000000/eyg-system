@@ -32,8 +32,8 @@ shop, and to get it back when it breaks.
 
 | Tool | Version | Why | Check |
 | --- | --- | --- | --- |
-| Node.js | **20.11.0** (`.nvmrc`) | `engines: >=20.11.0`. Node 22+ changes the OpenSSL behaviour Prisma relies on. | `node -v` |
-| npm | 10.x (ships with Node 20) | The lockfile is npm v3 format. Do not switch to pnpm or yarn — the lockfile is the reproducibility guarantee. | `npm -v` |
+| Node.js | **22.21.1** (`.nvmrc`) | `engines: >=22.21.1`. Node 22 LTS, supported to 2027-04-30. It was previously pinned at 20.11.0 with the note "Node 22+ changes the OpenSSL behaviour Prisma relies on" — that was wrong, and it is worth correcting rather than quietly dropping: Node 17 is where Node moved to OpenSSL 3, so Node 20 and Node 22 both bundle OpenSSL 3.0.x and there was no OpenSSL reason to stay behind. The real reason to move is that Node 20 reached end-of-life on 2026-04-30 and no longer receives security fixes. | `node -v` |
+| npm | 10.x (ships with Node 22) | The lockfile is npm v3 format. Do not switch to pnpm or yarn — the lockfile is the reproducibility guarantee. | `npm -v` |
 | Docker | 24+ | Only for the container path. Not needed on Vercel. | `docker --version` |
 | Git | 2.40+ | | `git --version` |
 | PostgreSQL client | 16 | `pg_dump` / `pg_restore` for the backup scripts. | `pg_dump --version` |

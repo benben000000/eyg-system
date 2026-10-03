@@ -51,25 +51,26 @@ const listOnly = process.argv.includes("--list");
 // the caller already has on PATH, which is also what CI installs.
 const GITLEAKS = process.env.GITLEAKS_BIN ?? "gitleaks";
 
-const workflow = readFileSync(".github/workflows/secret-scan.yml", "utf8");
-
-// Lift the config out of the workflow rather than duplicating it. A second copy
-// is a second thing to drift, and this file exists to prevent exactly that.
-const start = workflow.indexOf("<<'TOML'");
-const end = workflow.indexOf("\n            TOML", start);
-if (start === -1 || end === -1) {
-  console.error("could not find the TOML heredoc in .github/workflows/secret-scan.yml");
+// The config is a committed file, not a heredoc in the workflow.
+//
+// It used to be lifted out of `.github/workflows/secret-scan.yml` by finding the
+// text between `<<'TOML'` and a `TOML` line indented twelve spaces. That worked on
+// paper and was wrong in practice: in the workflow the terminator sat two spaces
+// past the YAML block's base indentation, so bash never terminated the heredoc and
+// gitleaks was handed a file containing the rest of the script. This script then
+// reproduced the same mistake by stripping a fixed twelve spaces, and produced a
+// config that parsed — a third file, matching neither the intent nor the runner.
+//
+// Reading `.gitleaks.toml` removes the whole class: there is one file, it is the
+// file CI scans with, and it is validated by the real binary.
+const CONFIG = ".gitleaks.toml";
+if (!existsSync(CONFIG)) {
+  console.error(`${CONFIG} is missing. It is the scanner's configuration and is committed.`);
   process.exit(1);
 }
 
-const cfgBody = workflow
-  .slice(start + "<<'TOML'".length, end)
-  .split(/\r?\n/)
-  .map((l) => l.replace(/^ {12}/, ""))
-  .join("\n");
-
 const cfgPath = join(tmpdir(), "eyg-gitleaks.toml");
-writeFileSync(cfgPath, cfgBody, "utf8");
+writeFileSync(cfgPath, readFileSync(CONFIG));
 
 const reportPath = join(tmpdir(), "eyg-gitleaks-report.json");
 

@@ -38,7 +38,7 @@ primary_region = "sin"
   # The image already sets these; repeating them here keeps the intent visible
   # in `fly logs` when something goes wrong at build time.
   [build.args]
-    NODE_VERSION = "20.11.0"
+    NODE_VERSION = "22.21.1"
     ALPINE_VERSION = "3.21"
 
 [env]

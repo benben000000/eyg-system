@@ -269,11 +269,28 @@ A 48-SKU catalogue with a few hundred bookings a month is nowhere near 0.5 GB.
 
 ## 8. Node version
 
-`.nvmrc` pins `20.11.0`; `engines` requires `>=20.11.0`.
+`.nvmrc` pins `22.21.1`; `engines` requires `>=22.21.1`. Change both together or
+they will disagree — Vercel reads `.nvmrc`, npm reads `engines`, and a mismatch
+means the build runs on a runtime nobody tested.
 
-If the Vercel build log warns that Node 20 has reached end-of-life, bump
-`.nvmrc` and `engines` together to Node 22 and redeploy. Change both or they
-will disagree.
+## 8.1 When to bump Node again
+
+Node 22 LTS is supported to **2027-04-30**. Put that date in a calendar now, and
+bump `.nvmrc`, `engines`, `Dockerfile`'s `ARG NODE_VERSION`, `fly.toml`,
+`docker-compose.yml`, and every workflow's `NODE_VERSION` env in the same commit.
+`ARG ALPINE_VERSION` has to exist for that Node line too: a tag is
+`node:<version>-alpine<alpine>`, and not every Node release was ever built
+against every Alpine release. `node:20.11.0-alpine3.21` was a combination that
+never existed — Node 20.11.0 shipped in October 2023 and Alpine 3.21 in December
+2024 — which is why the `docker-build` job could never produce an image. Check the
+tag before pinning it:
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://hub.docker.com/v2/repositories/library/node/tags/<version>-alpine<alpine>
+```
+
+A `404` means that exact pair was never published.
 
 ---
 

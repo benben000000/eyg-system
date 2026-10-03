@@ -48,7 +48,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "20.11.0"
+  NODE_VERSION: "22.21.1"
   NEXT_TELEMETRY_DISABLED: "1"
   CI: "true"
   # Keeps Playwright/Vitest from trying to open a browser in CI.
@@ -828,7 +828,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            NODE_VERSION=20.11.0
+            NODE_VERSION=22.21.1
 
       # Image size is a cost line, not a vanity metric (COST-OPTIMISATION §4).
       - name: Report image size

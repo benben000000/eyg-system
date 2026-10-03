@@ -1,0 +1,67 @@
+# ==============================================================================
+# EYG TIRE & AUTO CARE — gitleaks configuration
+# ==============================================================================
+# WHY THIS IS A FILE AND NOT A HEREDOC IN THE WORKFLOW
+#
+# It was one. The workflow generated it with:
+#
+#     cat > /tmp/gitleaks.toml <<'TOML'
+#     ...
+#     TOML
+#
+# Inside a YAML literal block, `TOML` must sit at exactly the block's base
+# indentation to be a heredoc terminator. It sat two spaces further right, so
+# bash did not treat it as the end of the heredoc. It read on to end-of-file and
+# wrote the REST OF THE SCRIPT into the config file:
+#
+#     line 38: warning: here-document at line 1 delimited by end-of-file
+#     (wanted `TOML')
+#
+# gitleaks then reported the consequence, four steps downstream:
+#
+#     FTL unable to load gitleaks config, err: While parsing config:
+#     toml: expected character =
+#
+# Nothing was wrong with this TOML. It parsed perfectly well the whole time — it
+# was simply never the file gitleaks was given.
+#
+# That is the whole argument for this file existing: the config can now be
+# validated by the real binary on a laptop, in an editor, and in review, instead
+# of only being knowable by getting a CI run to fail on it.
+# ==============================================================================
+
+title = "EYG Tire & Auto Care — gitleaks allowlist"
+
+[extend]
+  # The default rule set ONLY. The extra `[[rules]]` that used to sit here
+  # were not allowlist entries at all — in gitleaks, `[[rules]]` ADDS
+  # DETECTORS. They were generating 22 of the 26 findings on the first real
+  # scan, including one for every `openssl rand` line in docs/.
+  useDefault = true
+
+
+# -----------------------------------------------------------------------------
+# Paths, not rules. These directories can never contain a live secret
+# and scanning them only produces noise.
+# -----------------------------------------------------------------------------
+[allowlist]
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)coverage/''',
+  '''(^|/)backups/''',
+  '''(^|/)public/''',
+  '''(^|/)brand/''',
+  '''\.(png|jpg|jpeg|gif|webp|avif|ico|woff2?|ttf|eot|pdf|zip|gz)$''',
+  '''(^|/)public/og/''',
+]
+
+# NOTE: there is no `regexes` allowlist here, and that is deliberate.
+# A broad regex allowlist is the most common way a secret scanner is
+# silently neutered, and gitleaks 8.24 does not honour `[[allowlists]]`
+# `paths` for suppression anyway.
+#
+# The genuine false positives are four fake test fixtures. Each carries a
+# `gitleaks:allow` comment on its own line, which is narrower than any path
+# exclusion: a live key pasted into a test file trips a DIFFERENT rule and is
+# still caught. If a new one appears, annotate that line and say why.
