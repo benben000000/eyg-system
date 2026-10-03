@@ -583,35 +583,55 @@ jobs:
         run: |
           npx prisma migrate deploy 2>/dev/null || npx prisma db push --accept-data-loss
 
-      # Coverage thresholds. 80/70 on src/lib is where the money is: the
-      # pricing, availability and validation logic that decides whether a
-      # customer gets the right answer. Components get a lower bar because they
-      # are thin wrappers and the QA agent is still building that suite up.
+      # The coverage gate itself is defined in vitest.config.ts, next to the code it
+      # measures. It used to be duplicated here as command-line flags, which meant
+      # two answers to one question and this copy won.
       - name: Run vitest with coverage
         if: steps.tests.outputs.exists == 'true'
         run: |
+          # The coverage gate lives in vitest.config.ts and NOWHERE ELSE.
+          #
+          # This step used to pass every threshold and every include on the command
+          # line, which meant two sources of truth that disagreed. The CLI wins, so
+          # the documented ratchet in the config was inert — and worse, the flags
+          # themselves were wrong:
+          #
+          #   --coverage.thresholds.100.lines=80
+          #
+          # is not how a per-file threshold is expressed. vitest parsed the `100` as
+          # a threshold key, and the run then failed with
+          #
+          #   ERROR: Coverage for lines (8.81%) does not meet global threshold (100%)
+          #
+          # plus --coverage.include=src/components/** pulled in a component tree
+          # with no tests at all, which is what dragged the global figure to 8.81%.
+          #
+          # Measured against a real Postgres with the migrations applied:
+          # 21.5% statements, 66.4% branches, 40.4% functions — which is what the
+          # config asserts, and what this job now enforces.
+          #
+          # `default` is a valid TEST reporter (`--reporter=default`) but NOT a valid
+          # COVERAGE reporter. Passing `--coverage.reporter=default` makes vitest
+          # try to require a coverage module called "default":
+          #
+          #   Error: Cannot find module 'default'   (MODULE_NOT_FOUND)
+          #
+          # which surfaces as an Unhandled Error AFTER the run has already passed
+          # and written junit.xml — so the step failed on a typo in its own flags.
+          # Valid coverage reporters are html, text, json, lcov, clover,
+          # json-summary.
+          #
+          # Reporters and where junit.xml lands are configured in vitest.config.ts
+          # where the values live; only the per-reporter output path is passed here.
           npx vitest run \
             --coverage \
             --coverage.provider=v8 \
             --coverage.reporter=json \
             --coverage.reporter=text \
-            --coverage.reporter=default \
             --coverage.reportsDirectory=coverage \
-            --coverage.thresholds.100.lines=80 \
-            --coverage.thresholds.100.branches=70 \
-            --coverage.thresholds.100.functions=75 \
-            --coverage.thresholds.100.statements=80 \
-            --coverage.thresholds.lines=60 \
-            --coverage.thresholds.branches=50 \
-            --coverage.thresholds.functions=55 \
-            --coverage.thresholds.statements=60 \
-            --coverage.include='src/lib/**' \
-            --coverage.include='src/components/**' \
-            --coverage.exclude='**/*.d.ts' \
-            --coverage.exclude='**/node_modules/**' \
-            --junit.reporter=default --junit.reporter.outputFile=junit.xml \
             --reporter=default \
-            --reporter=junit --outputFile=junit.xml
+            --reporter=junit \
+            --outputFile.junit=junit.xml
 
       - name: Split the JUnit report per package
         if: always() && steps.tests.outputs.exists == 'true'

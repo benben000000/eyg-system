@@ -146,7 +146,27 @@ export default defineConfig({
     testTimeout: 15_000,
     hookTimeout: 15_000,
 
-    reporters: process.env.CI ? ["default", "junit", "json"] : ["default"],
+    /**
+ * Reporters, and WHERE the JUnit file lands.
+ *
+ * `outputFile` lives here rather than on the CI command line for the same reason
+ * the coverage thresholds do: the CLI flags override this file, so anything
+ * duplicated there is a second answer to the same question — and the copy on the
+ * command line was the one that ran. `--junit.reporter=default` followed by
+ * `--junit.reporter.outputFile=` throws before a single test executes
+ * (`Cannot create property 'outputFile' on string 'default'`), and repeating
+ * `--reporter` made vitest try to resolve "default" as a module path.
+ *
+ * `json` is deliberately NOT a reporter here. It writes the entire result set to
+ * STDOUT, which buries the summary under hundreds of kilobytes of test names —
+ * and the coverage JSON this job needs already comes from
+ * `--coverage.reporter=json`, which writes a file.
+ *
+ * `junit.xml` at the repository root is what `.github/workflows/ci.yml` uploads
+ * and what `mikepenz/action-junit-report` reads, so the path is a contract
+ * between this file and that workflow — stated here rather than guessed there.
+ */
+reporters: process.env.CI ? ["default", "junit"] : ["default"],
 
     coverage: {
       provider: "v8",
