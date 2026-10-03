@@ -1,5 +1,37 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+/**
+ * `twMerge` is told about this project's custom `--text-*` sizes, because it does
+ * not know them and silently deletes real colours.
+ *
+ * tailwind-merge decides whether `text-foo` is a FONT SIZE or a TEXT COLOUR from
+ * a fixed list of Tailwind's own size keywords. `eyebrow`, `body-lg`, `h1`,
+ * `display-1` are not on that list, so it classifies them as colours. Both land in
+ * the same group, the later one wins, and the actual colour is thrown away:
+ *
+ *     cn("bg-brand-500 text-ink-950 px-3 py-1 text-eyebrow")
+ *       -> "... bg-brand-500 px-3 py-1 text-eyebrow"      text-ink-950 GONE
+ *
+ * `text-eyebrow` is not a colour, so nothing sets one and the badge inherits
+ * `--color-foreground`, which is white in the dark theme. On brand yellow that is
+ * 1.59:1; on the success green, 2.27:1. Lighthouse measured both on /services.
+ *
+ * The fix is to declare the sizes, not to work around them by renaming the token.
+ *
+ * KEEP IN STEP WITH globals.css. `tests/unit/cn-font-sizes.test.ts` reads the
+ * `@theme` block and fails if a size is added there and not here, because the
+ * failure mode is silent: the class is dropped and nobody sees it.
+ */
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [
+        { text: ["eyebrow", "display-1", "display-2", "h1", "h2", "h3", "body-lg"] },
+      ],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
