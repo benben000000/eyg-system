@@ -1,0 +1,106 @@
+{
+  "ci": {
+    "collect": {
+      "staticDistDir": "./.next",
+      "url": [
+        "http://127.0.0.1:3000/",
+        "http://127.0.0.1:3000/services",
+        "http://127.0.0.1:3000/book"
+      ],
+      "numberOfRuns": 2,
+      "settings": {
+        "preset": "desktop",
+        "throttlingMethod": "simulate",
+        "throttling": {
+          "rttMs": 150,
+          "throughputKbps": 1638.4,
+          "cpuSlowdownMultiplier": 4
+        },
+        "formFactor": "mobile",
+        "screenEmulation": {
+          "mobile": true,
+          "width": 412,
+          "height": 823,
+          "deviceScaleFactor": 1.75,
+          "disabled": false
+        },
+        "onlyCategories": [
+          "performance",
+          "accessibility",
+          "best-practices",
+          "seo"
+        ],
+        "skipAudits": [
+          "uses-http2",
+          "canonical",
+          "hreflang",
+          "screenshot-thumbnails",
+          "final-screenshot",
+          "inspector-issues",
+          "full-page-screenshot"
+        ]
+      }
+    },
+    "assert": {
+      "preset": "lighthouse:recommended",
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.9 }],
+        "categories:accessibility": ["error", { "minScore": 0.95 }],
+        "categories:best-practices": ["error", { "minScore": 0.9 }],
+        "categories:seo": ["error", { "minScore": 0.95 }],
+
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+        "interaction-to-next-paint": ["error", { "maxNumericValue": 200 }],
+        "max-potential-fid": ["warn", { "maxNumericValue": 130 }],
+
+        "first-contentful-paint": ["error", { "maxNumericValue": 1800 }],
+        "speed-index": ["warn", { "maxNumericValue": 3400 }],
+        "total-blocking-time": ["error", { "maxNumericValue": 300 }],
+
+        "uses-responsive-images": ["warn", { "maxLength": 0 }],
+        "offscreen-images": ["error", { "maxLength": 0 }],
+        "uses-optimized-images": ["warn", { "maxLength": 0 }],
+        "modern-image-formats": ["error", { "maxLength": 0 }],
+        "efficient-animated-content": ["warn", { "maxLength": 0 }],
+        "unsized-images": ["error", { "maxLength": 0 }],
+        "non-composited-animations": ["warn", { "maxLength": 0 }],
+
+        "render-blocking-resources": ["warn", { "maxLength": 2 }],
+        "unused-javascript": ["warn", { "maxLength": 3 }],
+        "unused-css-rules": ["warn", { "maxLength": 5 }],
+        "unminified-javascript": ["error", { "maxLength": 0 }],
+        "uses-text-compression": ["error", { "maxLength": 0 }],
+        "uses-long-cache-ttl": ["error", { "maxLength": 1 }],
+
+        "color-contrast": ["error", { "maxLength": 0 }],
+        "image-alt": ["error", { "maxLength": 0 }],
+        "heading-order": ["error", { "maxLength": 0 }],
+        "link-name": ["error", { "maxLength": 0 }],
+        "button-name": ["error", { "maxLength": 0 }],
+        "label": ["error", { "maxLength": 0 }],
+        "aria-allowed-attr": ["error", { "maxLength": 0 }],
+        "aria-valid-attr-value": ["error", { "maxLength": 0 }],
+        "document-title": ["error", { "maxLength": 0 }],
+        "html-has-lang": ["error", { "maxLength": 0 }],
+        "meta-description": ["error", { "maxLength": 0 }],
+        "tap-targets": ["warn", { "maxLength": 0 }],
+        "target-size": ["warn", { "maxLength": 0 }],
+
+        "is-on-https": ["error", { "maxLength": 0 }],
+        "no-robots-txt": ["error", { "maxLength": 0 }],
+        "crawlable-anchors": ["error", { "maxLength": 0 }],
+        "http-status-code": ["error", { "maxLength": 0 }],
+        "valid-source-maps": ["warn", { "maxLength": 0 }],
+        "inspector-console": ["error", { "maxLength": 0 }],
+        "errors-in-console": ["error", { "maxLength": 0 }],
+        "deprecations": ["warn", { "maxLength": 0 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage",
+      "reportFilenamePattern": "lighthouse-%%PATHNAME%%-report.%%EXTENSION%%",
+      "skipGitHubSearch": true
+    }
+  }
+}

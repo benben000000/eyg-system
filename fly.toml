@@ -1,0 +1,144 @@
+# ============================================================================
+# EYG Tire & Auto Care — Fly.io
+# ============================================================================
+# NOT THE DEFAULT. Vercel is (docs/ops/DEPLOYMENT.md §8).
+#
+# Use Fly when one of these is true:
+#   - A cron job or an API route needs to run LONGER than Vercel's 60 s cap.
+#   - The database must be co-located with the app (low latency, no pooler).
+#   - The team wants a container they control end to end.
+#
+# Do NOT use Fly just because "it is Docker". The Hobby allowance for a shop
+# this size is roughly USD 5-8/month all-in, versus USD 0 on Vercel. That
+# difference is real money for a business with 308 Facebook followers.
+#
+# ---------------------------------------------------------------------------
+# SETUP
+#   fly launch --no-deploy --copy-config --region sin
+#   fly postgres create --name eyg-pg --region sin --initial-size 10
+#   fly secrets set --from-env .env.production
+#   fly deploy
+#
+# After `fly postgres create`, attach it:
+#   DATABASE_URL=$(fly postgres connect -a eyg-pg --app eyg-tire)   # prints a URL
+#   fly secrets set DATABASE_URL="postgres://..."                  # never commit
+#
+# ---------------------------------------------------------------------------
+# REGION
+# sin = Singapore. Same rationale as vercel.json: closest Vercel-equivalent
+# edge to Balanga City. nrt = Tokyo is the fallback. Never syd/ord — that is
+# 200+ ms of added latency on the tap-to-call, the site's primary conversion.
+# ============================================================================
+
+app = "eyg-tire-auto-care"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+  # The image already sets these; repeating them here keeps the intent visible
+  # in `fly logs` when something goes wrong at build time.
+  [build.args]
+    NODE_VERSION = "20.11.0"
+    ALPINE_VERSION = "3.21"
+
+[env]
+  NODE_ENV = "production"
+  NEXT_TELEMETRY_DISABLED = "1"
+  PORT = "3000"
+  HOSTNAME = "0.0.0.0"
+  LOG_LEVEL = "info"
+
+[processes]
+  app = "node_modules/.bin/next start -p 3000 -H 0.0.0.0"
+
+# ---------------------------------------------------------------------------
+# Machines
+#
+# The Dockerfile documents a 180-260 MB steady RSS and a ~420 MB cold-start
+# spike. 1 GB gives the spike room without paying for a second machine, and the
+# 512 MB memory limit is enforced at the hypervisor so a leak cannot take the
+# host down. `auto_stop` matters for cost: a shop site is idle at 2am, and a
+# stopped machine costs nothing.
+# ---------------------------------------------------------------------------
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+
+  [vm.env]
+    # The Dockerfile already sets this; Fly needs it at the VM layer too.
+    NODE_OPTIONS = "--max-old-space-size=768"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  # Force HTTPS at the edge. Combined with the HSTS header in next.config.ts,
+  # a customer can never land on plaintext.
+  force_https = true
+  # Vercel sets X-Powered-By off; match that so the stack is not advertised.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # /api/health is what the Fly health checks and the external uptime monitor
+  # both poll. It is `no-store` and touches nothing but the process.
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "40s"
+    method = "GET"
+    path = "/api/health"
+    tls = true
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+# ---------------------------------------------------------------------------
+# Volumes
+#
+# Next writes its ISR cache and image optimiser output to .next/cache. On a
+# single machine that is ephemeral and fine — it regenerates on boot. Add this
+# only when you move to two or more machines and see cache thrash.
+#
+#   [[mounts]]
+#   source = "next_cache"
+#   destination = "/app/.next/cache"
+#
+#   [[volumes]]
+#   name = "next_cache"
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Postgres notes (see docs/ops/BACKUP-AND-RECOVERY.md)
+#
+# Fly Postgres does NOT include automated backups on the current plans. The
+# /api/cron/backup cron in vercel.json is the portable answer; on Fly, run the
+# backup as a Machine task instead so it does not compete with the web process:
+#
+#   fly machine run scripts/db-backup.mjs
+#
+# and schedule it with `fly machine run` on a cron, or with an external
+# scheduler calling a signed /api/cron/backup route.
+#
+# Never rely on `fly postgres export` alone: it is a point-in-time file, not a
+# tested restore.
+# ---------------------------------------------------------------------------
+
+# ============================================================================
+# SECRETS — set with `fly secrets set`, never in this file and never in git.
+#
+#   fly secrets set AUTH_SECRET="$(openssl rand -base64 48)"
+#   fly secrets set PII_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+#   fly secrets set WEBHOOK_SIGNING_SECRET="$(openssl rand -base64 32)"
+#
+#   fly secrets set --from-env .env.production     # bulk, from a local file
+#
+# Full table with where to get every key: docs/ops/DEPLOYMENT.md §4.
+# ============================================================================

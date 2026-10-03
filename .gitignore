@@ -1,0 +1,108 @@
+# ============================================================================
+# EYG Tire & Auto Care — ignore rules
+# The rule that matters most: **no secret ever enters the index.**
+# ============================================================================
+
+# ---------- Secrets & environment ----------
+# `.env.example` IS committed on purpose (it is the env contract).
+.env
+.env.*
+!.env.example
+!.env.docker.example
+.env.local
+.env.*.local
+*.pem
+*.key
+!public/**/*.key
+secrets/
+*.p12
+*.pfx
+
+# ---------- Next.js ----------
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# ---------- Node ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.yarn/cache
+.yarn/install-state.gz
+.pnpm-store/
+
+# ---------- Test / QA output ----------
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+junit.xml
+junit-*.xml
+*.lcov
+
+# ---------- Lighthouse / perf ----------
+.lighthouseci/
+lighthouse-report*.json
+lighthouse-report*.html
+
+# ---------- Logs ----------
+logs/
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# ---------- Database artefacts (BACKUP-AND-RECOVERY.md) ----------
+backups/
+*.dump
+*.dump.enc
+*.sql.gz
+*.tar.zst
+restore-dry-run/
+
+# ---------- OG / generated images (regenerate: node scripts/generate-og.mjs) ----------
+# NOTE: `public/og/` IS committed — the OG images are served at build time and
+# `/og/default.png` is referenced by `src/lib/seo.ts`. Do NOT ignore it.
+
+# ---------- Editors ----------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------- OS ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ---------- Docker ----------
+docker-compose.override.yml
+docker-compose.*.override.yml
+!.github/docker-compose*.yml
+
+# ---------- Sentry (source maps are uploaded, not committed) ----------
+/.sshtunnel/
+*.map
+!public/**/*.map
+.sentryclirc
+
+# ---------- Misc ----------
+.vercel
+.turbo
+.cache
+tmp/
+scratch/
+*.tsbuildinfo
+.eslintcache

@@ -1,0 +1,354 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   EYG TIRE & AUTO CARE — DESIGN TOKENS
+   Single source of truth. DO NOT hardcode hex values in components.
+   Source: logo colour extraction from the official EYG profile mark.
+   Brand yellow modal = #FCC605 (2.7% of logo pixels, verified).
+   ------------------------------------------------------------------------
+   OWNER: orchestrator. Any change here requires a brand-guidelines update.
+   ========================================================================= */
+
+@theme {
+  /* ---- TYPOGRAPHY ------------------------------------------------------ */
+  --font-display: var(--font-saira), "Arial Black", system-ui, sans-serif;
+  --font-sans: var(--font-barlow), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-barlow-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* ---- BRAND: EYLAN YELLOW (primary / action) ------------------------- */
+  --color-brand-50: #fffaeb;
+  --color-brand-100: #fff1c2;
+  --color-brand-200: #ffe684;
+  --color-brand-300: #ffdc47;
+  --color-brand-400: #ffd11a;
+  --color-brand-500: #fcc605; /* ★ EXTRACTED BRAND YELLOW */
+  --color-brand-600: #d9a800;
+  --color-brand-700: #a67f00;
+  --color-brand-800: #6d5300;
+  --color-brand-900: #3a2c00;
+
+  /* ---- BRAND: INK (primary dark / motorsport) -------------------------- */
+  --color-ink-50: #f6f6f7;
+  --color-ink-100: #e3e3e6;
+  --color-ink-200: #c7c7cd;
+  --color-ink-300: #a0a0a9;
+  --color-ink-400: #71717e;
+  --color-ink-500: #52525e;
+  --color-ink-600: #3d3d47;
+  --color-ink-700: #2a2a32;
+  --color-ink-800: #17171d;
+  --color-ink-900: #0e0e12;
+  --color-ink-950: #06060a; /* ★ LOGO BACKDROP */
+
+  /* ---- BRAND: RACING RED (urgent / clearance / errors) ----------------- */
+  --color-racing-50: #fef2f2;
+  --color-racing-100: #fee2e2;
+  --color-racing-200: #fecaca;
+  --color-racing-300: #fca5a5;
+  --color-racing-400: #f87171;
+  --color-racing-500: #ef4444;
+  --color-racing-600: #dc2626;
+  --color-racing-700: #b91c1c;
+  --color-racing-800: #991b1b;
+  --color-racing-900: #7f1d1d;
+
+  /* ---- BRAND: PIT GREEN (confirmed / open / success) ------------------- */
+  --color-pit-50: #f0fdf4;
+  --color-pit-100: #dcfce7;
+  --color-pit-200: #bbf7d0;
+  --color-pit-300: #86efac;
+  --color-pit-400: #4ade80;
+  --color-pit-500: #22c55e;
+  --color-pit-600: #16a34a;
+  --color-pit-700: #15803d;
+  --color-pit-800: #166534;
+  --color-pit-900: #14532d;
+
+  /* ---- SEMANTIC (used by components; map to brand ramp) ---------------- */
+  --color-background: #ffffff;
+  --color-foreground: var(--color-ink-950);
+  --color-surface: #ffffff;
+  --color-surface-muted: #f6f6f7;
+  --color-surface-inverse: var(--color-ink-950);
+  --color-border: #e3e3e6;
+  --color-border-strong: #c7c7cd;
+  --color-muted-foreground: #52525e;
+  --color-ring: var(--color-brand-500);
+  --color-primary: var(--color-ink-950);
+  --color-primary-foreground: #ffffff;
+  --color-accent: var(--color-brand-500);
+  --color-accent-foreground: var(--color-ink-950);
+  --color-destructive: var(--color-racing-600);
+  --color-destructive-foreground: #ffffff;
+  --color-success: var(--color-pit-600);
+
+  /* ---- FONT SIZES (fluid, mobile-first) -------------------------------- */
+  --text-eyebrow: 0.75rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-eyebrow--letter-spacing: 0.16em;
+  --text-eyebrow--font-weight: 700;
+
+  --text-display-1: clamp(2.5rem, 1.4rem + 5.2vw, 5.5rem);
+  --text-display-1--line-height: 0.92;
+  --text-display-1--letter-spacing: -0.03em;
+  --text-display-1--font-weight: 900;
+
+  --text-display-2: clamp(2rem, 1.3rem + 3.4vw, 3.75rem);
+  --text-display-2--line-height: 0.96;
+  --text-display-2--letter-spacing: -0.025em;
+  --text-display-2--font-weight: 900;
+
+  --text-h1: clamp(1.875rem, 1.4rem + 2.2vw, 3rem);
+  --text-h1--line-height: 1.06;
+  --text-h1--letter-spacing: -0.02em;
+  --text-h1--font-weight: 800;
+
+  --text-h2: clamp(1.5rem, 1.25rem + 1.2vw, 2.125rem);
+  --text-h2--line-height: 1.14;
+  --text-h2--letter-spacing: -0.015em;
+  --text-h2--font-weight: 800;
+
+  --text-h3: clamp(1.25rem, 1.12rem + 0.6vw, 1.625rem);
+  --text-h3--line-height: 1.2;
+  --text-h3--letter-spacing: -0.01em;
+  --text-h3--font-weight: 700;
+
+  --text-body-lg: 1.0625rem;
+  --text-body-lg--line-height: 1.65;
+
+  /* ---- MOTION ---------------------------------------------------------- */
+  --ease-rapid: cubic-bezier(0.2, 0, 0, 1);
+  --ease-snap: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-brake: cubic-bezier(0.5, 0, 0.75, 0);
+
+  /* ---- ELEVATION / RADIUS --------------------------------------------- */
+  --radius-eyebrow: 2px;
+  --radius-card: 12px;
+  --radius-panel: 18px;
+  --radius-pill: 999px;
+
+  --shadow-plate: 0 1px 2px rgb(6 6 10 / 0.06), 0 4px 14px rgb(6 6 10 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(6 6 10 / 0.06), 0 12px 32px rgb(6 6 10 / 0.1);
+  --shadow-cta: 0 1px 0 0 rgb(255 255 255 / 0.35) inset, 0 6px 0 0 var(--color-brand-700),
+    0 12px 24px -6px rgb(6 6 10 / 0.35);
+  --shadow-cta-hover: 0 1px 0 0 rgb(255 255 255 / 0.4) inset, 0 4px 0 0 var(--color-brand-700),
+    0 10px 20px -6px rgb(6 6 10 / 0.4);
+
+  /* ---- LAYOUT ---------------------------------------------------------- */
+  --container-page: 76rem;
+  --container-prose: 44rem;
+  --header-height: 4rem;
+  --mobile-action-bar-height: 4.25rem;
+
+  /* ---- Z-INDEX SCALE (never use raw z-index in components) ------------ */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-sticky-header: 40;
+  --z-dropdown: 50;
+  --z-overlay: 60;
+  --z-modal: 70;
+  --z-toast: 80;
+  --z-mobile-bar: 90;
+}
+
+/* ============================================================================
+   DARK (MOTORSPORT) THEME — EYG's primary presentation mode.
+   The EYG mark is a yellow-on-black lockup; the site leads dark.
+   `data-theme="light"` is available and fully supported for daytime/indoor use.
+   ========================================================================= */
+@layer theme {
+  [data-theme="dark"] {
+    --color-background: var(--color-ink-950);
+    --color-foreground: #ffffff;
+    --color-surface: var(--color-ink-900);
+    --color-surface-muted: var(--color-ink-800);
+    --color-surface-inverse: #ffffff;
+    --color-border: #2a2a32;
+    --color-border-strong: #3d3d47;
+    --color-muted-foreground: var(--color-ink-300);
+    --color-primary: var(--color-brand-500);
+    --color-primary-foreground: var(--color-ink-950);
+    --color-accent: var(--color-brand-500);
+    --color-accent-foreground: var(--color-ink-950);
+    --shadow-plate: 0 1px 2px rgb(0 0 0 / 0.5), 0 4px 14px rgb(0 0 0 / 0.4);
+    --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.5), 0 12px 32px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+
+    /* A11Y-002 / A11Y-005: `#FCC605` on white is 1.59:1. It is a superb fill on
+       a dark button and an unusable *indicator* on a light surface, so text and
+       focus rings get a darkened brand step instead. 4.5:1+ on white. */
+    --color-brand-text: var(--color-brand-800);
+    --color-brand-ring: var(--color-brand-800);
+    /* A11Y-003: `#e3e3e6` is 1.28:1 on white and cannot legally bound a form
+       control (SC 1.4.11 needs 3:1). Raised to a perceivable grey. */
+    --color-border: var(--color-ink-300);
+    --color-border-strong: var(--color-ink-400);
+  }
+
+  [data-theme="dark"] {
+    /* Brand yellow on ink is 12.73:1 — the identity case, keep it. */
+    --color-brand-text: var(--color-brand-400);
+    --color-brand-ring: var(--color-brand-400);
+  }
+
+  :root {
+    --color-brand-text: var(--color-brand-800);
+    --color-brand-ring: var(--color-brand-800);
+  }
+}
+
+/* ============================================================================
+   BASE
+   ========================================================================= */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--header-height) + 1rem);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    text-wrap: balance;
+  }
+
+  p,
+  li {
+    text-wrap: pretty;
+  }
+
+  /* Keyboard focus only — never remove focus without a replacement.
+     Two-tone ring: a dark outer stroke guarantees ≥3:1 against both the page and
+     the control, and the brand-yellow inner stroke keeps it on-brand. */
+  :focus-visible {
+    outline: 3px solid var(--color-brand-ring);
+    outline-offset: 2px;
+    border-radius: 2px;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-brand-500) 45%, transparent);
+  }
+
+  /* Form controls get a perceivable boundary (A11Y-003). */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    border-color: var(--color-border-strong);
+  }
+
+  /* Fluid type without horizontal overflow. */
+  h1,
+  h2 {
+    overflow-wrap: break-word;
+  }
+
+  ::selection {
+    background: var(--color-brand-500);
+    color: var(--color-ink-950);
+  }
+
+  /* Motion safety */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ============================================================================
+   COMPONENT UTILITIES — brand motifs
+   ========================================================================= */
+@layer components {
+  /* The EYG speed-stripe: an angled yellow bar. The signature graphic device. */
+  .eyg-stripe {
+    position: relative;
+  }
+  .eyg-stripe::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: -0.5rem;
+    height: 4px;
+    background: linear-gradient(90deg, var(--color-brand-500) 0%, var(--color-brand-300) 60%, transparent 100%);
+    clip-path: polygon(0 0, 100% 0, 96% 100%, 0 100%);
+  }
+
+  /* Diagonal hazard hatching — used for "clearance", "closing soon" states. */
+  .eyg-hazard {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--color-brand-500) 0 12px,
+      transparent 12px 24px
+    );
+  }
+
+  /* Checkered-flag micro pattern for section dividers. */
+  .eyg-checker {
+    background-image:
+      conic-gradient(var(--color-border-strong) 25%, transparent 0 50%, var(--color-border-strong) 0 75%, transparent 0);
+    background-size: 16px 16px;
+  }
+
+  .eyg-eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--text-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  /* Reserve space for the mobile action bar so footers are never hidden. */
+  .pb-action-bar {
+    padding-bottom: calc(var(--mobile-action-bar-height) + env(safe-area-inset-bottom, 0px));
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}

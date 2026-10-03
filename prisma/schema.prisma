@@ -1,0 +1,1087 @@
+// ============================================================================
+// EYG TIRE & AUTO CARE â€” DATA MODEL
+// Owner: backend agent. The orchestrator owns the *shape*; do not rename
+// models or fields without updating `src/lib/types.ts` and the API contract doc.
+//
+// INVENTORY (added by the orchestrator)
+// ------------------------------------
+// The one invariant that matters: `StockLevel.available` must never be negative.
+// `available = onHand - reserved`. Every decrement is atomic and refuses to
+// push it below zero, because overselling the last oil filter means a customer
+// arrives, the bay is occupied, and the part is not there.
+//
+// `StockMovement` is an append-only ledger and is the only source of history.
+// `StockLevel` is the running total derived from it, so any figure on screen can
+// be reconstructed â€” which is the difference between "the system is wrong" and
+// "we cannot explain why".
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // POOLED connection â€” every runtime query. On serverless this must be a
+  // pooler URL (Neon `-pooler`, or Supabase `?pgbouncer=true`), otherwise each
+  // invocation opens its own connection and exhausts the provider's limit.
+  url = env("DATABASE_URL")
+
+  // DIRECT connection â€” used only by `prisma migrate deploy`, which needs real
+  // prepared statements and advisory locks that a transaction pooler breaks.
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// People & access
+// ---------------------------------------------------------------------------
+
+enum Role {
+  OWNER
+  MANAGER
+  TECHNICIAN
+  FRONT_DESK
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  phone        String?
+  passwordHash String
+  role         Role      @default(FRONT_DESK)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  twoFactorSecret String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions     Session[]
+  auditLogs    AuditLog[]
+
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String   // E.164 normalised, e.g. +639171234567
+  notes     String?
+  marketingOptIn Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicles Vehicle[]
+  bookings Booking[]
+  quotes   QuoteRequest[]
+
+  @@unique([phone])
+  @@index([email])
+}
+
+model Vehicle {
+  id         String   @id @default(cuid())
+  customerId String
+  year       Int
+  make       String
+  model      String
+  variant    String?
+  engine     String?
+  plate      String?
+  vin        String?
+  mileageKm  Int?
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([customerId])
+  @@index([make, model])
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue
+// ---------------------------------------------------------------------------
+
+model ServiceCategory {
+  id          String @id @default(cuid())
+  slug        String @unique
+  name        String
+  blurb       String?
+  icon        String?
+  accentFrom  String?
+  accentTo    String?
+  sortOrder   Int    @default(0)
+  isActive    Boolean @default(true)
+
+  services Service[]
+  packages Package[]
+
+  @@index([sortOrder])
+}
+
+enum ServicePricing {
+  FIXED
+  RANGE
+  CALL_FOR_PRICE
+}
+
+model Service {
+  id            String         @id @default(cuid())
+  categoryId    String
+  slug          String         @unique
+  name          String
+  shortName     String?
+  summary       String
+  description   String
+  pricing       ServicePricing @default(FIXED)
+  priceMin      Int?           // PHP, integer pesos (no cents in PH practice)
+  priceMax      Int?
+  priceNote     String?
+  durationMin   Int?
+  isPopular     Boolean        @default(false)
+  isFeatured    Boolean        @default(false)
+  requiresVehicle Boolean      @default(false)
+  includes      String[]
+  excludes      String[]
+  sortOrder     Int            @default(0)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  category  ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  packageItems PackageItem[]
+  bookingItems BookingItem[]
+  partRequirements ServicePartRequirement[]
+
+  @@index([categoryId, sortOrder])
+  @@index([isPopular])
+}
+
+model Package {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  tagline       String
+  description   String
+  categoryId    String?
+  priceMin      Int
+  priceMax      Int?
+  compareAtMin  Int?     // strikethrough anchor price
+  savingsPct    Int?
+  badge         String?  // e.g. "Rainy Season Pick"
+  isSeasonal    Boolean  @default(false)
+  seasonKey     String?  // e.g. "rainy", "summer"
+  validFrom     DateTime?
+  validUntil    DateTime?
+  isFeatured    Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  category  ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  items     PackageItem[]
+
+  @@index([isActive, sortOrder])
+}
+
+model PackageItem {
+  id        String @id @default(cuid())
+  packageId String
+  serviceId String
+  quantity  Int    @default(1)
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, serviceId])
+}
+
+model TireBrand {
+  id        String  @id @default(cuid())
+  slug      String  @unique
+  name      String
+  tier      String? // "Premium" | "Mid" | "Value"
+  isPartner Boolean @default(false)
+  logoUrl   String?
+  website   String?
+  note      String?
+  sortOrder Int     @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// Promotions
+// ---------------------------------------------------------------------------
+
+enum PromoKind {
+  PERCENT_OFF
+  FIXED_OFF
+  BUNDLE
+  CLEARANCE
+  SEASONAL
+  TIRES
+}
+
+model Promotion {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  subtitle    String
+  description String
+  kind        PromoKind
+  badge       String?
+  code        String?   @unique
+  valuePct    Int?
+  valueOff    Int?
+  terms       String[]
+  imageUrl    String?
+  isActive    Boolean   @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  priority    Int       @default(0)
+  viewCount   Int       @default(0)
+  claimCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  claims PromoClaim[]
+
+  @@index([isActive, priority])
+  @@index([endsAt])
+}
+
+model PromoClaim {
+  id         String   @id @default(cuid())
+  promotionId String
+  name       String
+  phone      String
+  email      String?
+  createdAt  DateTime @default(now())
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  @@index([promotionId])
+}
+
+// ---------------------------------------------------------------------------
+// Availability & booking
+// ---------------------------------------------------------------------------
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  RESCHEDULED
+}
+
+enum BookingChannel {
+  WEB
+  PHONE
+  WALK_IN
+  MESSENGER
+  WHATSAPP
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  reference     String        @unique // human code, e.g. EYG-7F3K9A
+  customerId    String?
+  vehicleId     String?
+  channel       BookingChannel @default(WEB)
+
+  // Denormalised contact so a booking survives customer edits/deletion
+  customerName  String
+  customerPhone String
+  customerEmail String?
+
+  startAt       DateTime
+  endAt         DateTime?
+  status        BookingStatus @default(PENDING)
+
+  serviceNotes  String?
+  staffNotes    String?
+  promoCode     String?
+  subtotalMin   Int?
+  subtotalMax   Int?
+
+  // Consent + audit
+  // ── Parts availability snapshot, written when the booking is confirmed ──
+  /**
+   * True when a BLOCKING part was short at confirmation time. Persisted so
+   * a blocked-but-taken booking is distinguishable from an ordinary one —
+   * without it, `isBlocking` drifts wrong on whichever side nobody audits.
+   */
+  partsBlocked Boolean @default(false)
+  /** How many distinct parts could not be fully covered. */
+  partsShortfallCount Int @default(0)
+  /** Snapshot of ReserveResult.shortfalls, for the staff panel and audit. */
+  partsShortfall Json?
+
+  consentSms    Boolean       @default(false)
+  consentMarketing Boolean    @default(false)
+  source        String?
+  utmSource     String?
+  utmCampaign   String?
+  createdIp     String?
+  userAgent     String?
+
+  confirmedAt   DateTime?
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  vehicle  Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  items    BookingItem[]
+  stockMovements StockMovement[]
+  reservations   Reservation[]
+  messages Notification[]
+  history  BookingEvent[]
+
+  @@index([startAt])
+  @@index([status])
+  @@index([customerPhone])
+  @@index([createdAt])
+}
+
+model BookingItem {
+  id        String  @id @default(cuid())
+  bookingId String
+  serviceId String?
+  name      String  // snapshot â€” services change, bookings must not
+  quantity  Int     @default(1)
+  priceMin  Int?
+  priceMax  Int?
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+}
+
+model BookingEvent {
+  id        String        @id @default(cuid())
+  bookingId String
+  from      BookingStatus?
+  to        BookingStatus
+  actor     String?
+  note      String?
+  createdAt DateTime      @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId, createdAt])
+}
+
+/// Blackout periods + one-off bay closures.
+model BayClosure {
+  id        String   @id @default(cuid())
+  title     String
+  startsAt  DateTime
+  endsAt    DateTime
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([startsAt, endsAt])
+}
+
+// ---------------------------------------------------------------------------
+// Quotes (instant estimator leads)
+// ---------------------------------------------------------------------------
+
+enum QuoteStatus {
+  NEW
+  CONTACTED
+  QUOTED
+  WON
+  LOST
+  EXPIRED
+}
+
+model QuoteRequest {
+  id          String      @id @default(cuid())
+  reference   String      @unique
+  customerId  String?
+  name        String
+  phone       String
+  email       String?
+  vehicleYear Int?
+  vehicleMake String?
+  vehicleModel String?
+  packageSlug String?
+  selections  Json?       // estimator payload
+  estimateMin Int?
+  estimateMax Int?
+  status      QuoteStatus @default(NEW)
+  notes       String?
+  createdIp   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Trust & content
+// ---------------------------------------------------------------------------
+
+enum ReviewSource {
+  GOOGLE
+  FACEBOOK
+  MANUAL
+}
+
+model Review {
+  id          String       @id @default(cuid())
+  source      ReviewSource
+  externalId  String?
+  authorName  String
+  authorAvatarUrl String?
+  rating      Int
+  title       String?
+  body        String
+  serviceTag  String?
+  publishedAt DateTime?
+  isFeatured  Boolean      @default(false)
+  isPublished Boolean      @default(true)
+  syncedAt    DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+
+  @@unique([source, externalId])
+  @@index([isPublished, publishedAt])
+}
+
+model GalleryImage {
+  id        String   @id @default(cuid())
+  title     String
+  caption   String?
+  alt       String   // REQUIRED for a11y/SEO â€” never ship an image without it
+  url       String
+  blurDataUrl String?
+  width     Int
+  height    Int
+  category  String?  // "before" | "after" | "bay" | "team" | "diagnostics"
+  isBefore  Boolean  @default(false)
+  afterId   String?
+  sortOrder Int      @default(0)
+  isPublished Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([isPublished, sortOrder])
+}
+
+model Faq {
+  id        String  @id @default(cuid())
+  question  String
+  answer    String
+  category  String?
+  sortOrder Int     @default(0)
+  isPublished Boolean @default(true)
+}
+
+model Testimonial {
+  id        String  @id @default(cuid())
+  name      String
+  vehicle   String?
+  quote     String
+  rating    Int     @default(5)
+  isPublished Boolean @default(true)
+  sortOrder Int     @default(0)
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+model BusinessHours {
+  id        Int    @id @default(autoincrement())
+  // 0 = Sunday â€¦ 6 = Saturday (matches JS Date#getDay)
+  dayOfWeek Int
+  opensAt   String // "08:00"
+  closesAt  String // "17:00"
+  isClosed  Boolean @default(false)
+  label     String?
+}
+
+model Holiday {
+  id       String   @id @default(cuid())
+  name     String
+  date     DateTime @db.Date
+  isClosed Boolean  @default(true)
+  note     String?
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  bookingId String?
+  channel   String   // "sms" | "email" | "whatsapp"
+  template  String
+  recipient String
+  subject   String?
+  body      String?
+  status    String   @default("queued") // queued | sent | delivered | failed | skipped
+  providerId String?
+  error     String?
+  attempts  Int      @default(0)
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([bookingId])
+}
+
+model Subscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  phone     String?
+  source    String?
+  isActive  Boolean  @default(true)
+  confirmedAt DateTime?
+  unsubscribedAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+/// Fallback rate-limit counters when Upstash is unavailable.
+model RateLimitCounter {
+  key         String   @id
+  count       Int      @default(0)
+  resetAt     DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+/// Generic lead sink for newsletter / roadside / contact forms.
+model Lead {
+  id        String   @id @default(cuid())
+  kind      String   // "roadside" | "contact" | "newsletter" | "tire-size"
+  name      String?
+  phone     String?
+  email     String?
+  message   String?
+  meta      Json?
+  status    String   @default("new")
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+}
+
+// ============================================================================
+// INVENTORY â€” append here, after the existing models.
+// Orchestrator-owned. Agents extend and consume this; they do not reshape it.
+// ============================================================================
+
+// â”€â”€ Classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/**
+ * How a product is physically counted. This drives the whole unit story:
+ * oil is counted in litres and decanted, tyres come in sets of four or five
+ * (the spare), and a wiper blade is counted one at a time.
+ */
+enum UnitOfMeasure {
+  EA // one piece â€” filters, wiper blades, bulbs
+  PAIR // a pair â€” wiper blades, brake pads sold as an axle set
+  SET // a multi-piece set â€” a full service kit
+  LITRE // engine oil, coolant, brake fluid
+  KG // grease, additives by weight
+  M // metres â€” belts, hose
+}
+
+enum ProductKind {
+  TYRE // size + brand + model; DOT-coded; degrades with age
+  OIL // lubricants, decantable
+  FILTER // oil/air/fuel
+  BRAKE // pads, discs, shoes, fluid
+  SUSPENSION // shocks, bushings, CVL
+  BATTERY // has a warranty window
+  WIPER // blades, washers
+  ELECTRICAL
+  CONSUMABLE // grease, solvent, adhesive
+  TYRE_ACCESSORY // valves, tubes, weights, plugs
+  TOOL // owned by the shop, not sold
+  OTHER
+}
+
+enum StockMovementKind {
+  OPENING // the first ever count â€” establishes the baseline
+  RECEIVE // supplier delivery, or a customer return of a part
+  CONSUME // used on a job; always references a Booking
+  RESERVE // move onHand â†’ reserved (not a physical movement)
+  RELEASE // reserved â†’ onHand (booking cancelled or expired)
+  ADJUST_UP // found stock during a count
+  ADJUST_DOWN // count correction, damage, loss
+  SHRINK // evaporation, spillage, scrapped â€” deliberately separate from ADJUST_DOWN so shrinkage is measurable
+  TRANSFER_IN
+  TRANSFER_OUT
+  RETURN_TO_SUPPLIER
+}
+
+enum ReservationStatus {
+  HELD
+  CONSUMED
+  RELEASED
+  EXPIRED
+}
+
+enum StockCountStatus {
+  DRAFT // created, nothing counted yet
+  COUNTING // in progress
+  REVIEW // counted, awaiting a decision on variances
+  POSTED // variances written to the ledger
+  CANCELLED
+}
+
+// â”€â”€ Catalogue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  contactName String?
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+  purchaseOrders PurchaseOrder[]
+
+  @@index([isActive])
+}
+
+model Product {
+  id        String      @id @default(cuid())
+  /** Human code, unique. Printed on the shelf label and read by the mechanic. */
+  sku       String      @unique
+  name      String
+  kind      ProductKind   @default(OTHER)
+  unit      UnitOfMeasure @default(EA)
+  brand     String?
+  supplierId String?
+  barcode   String? // optional; a shop that has a scanner will want it
+
+  // â”€â”€ Tyre-specific â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /** Tyre size, canonical: "205/55R16". Indexed â€” the mechanic searches by this. */
+  size      String?
+  /** Aspect ratio as a fraction of the width, e.g. 55 for 205/55R16. */
+  aspectRatio Int?
+  rimSizeIn Int?
+  loadIndex String?
+  speedRating String?
+  /** Tyre family / pattern, e.g. "Primacy 4", "Ecopia EP150". */
+  pattern   String?
+  /**
+   * Tyre DOT code, `WWYY`: production WEEK then two-digit YEAR.
+   * "1824" is week 18 of 2024. Read the example in that order — "2418" is
+   * week 24 of 2018, not week 18 of 2024, and reading it the other way makes
+   * every tyre on the shelf look a year older than it is.
+   *
+   * Rubber degrades with age, which is why this is tracked at all.
+   */
+  dotCode   String?
+
+  // â”€â”€ Money. Integers: Philippine practice has no cents. â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /** What the shop paid. Never exposed to customers. */
+  costPrice Int        @default(0)
+  sellPrice Int        @default(0)
+  /** Derived at read time; stored for reporting. costPrice 0 = unknown. */
+  marginPct Int?
+
+  // â”€â”€ Replenishment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /** Warn when *available* falls to or below this. */
+  reorderPoint Int @default(0)
+  /** Default quantity to order when it trips. */
+  reorderQty   Int @default(0)
+  /** Shelf life in days from receipt. Oil and coolant expire; tyres do not. */
+  shelfLifeDays Int?
+
+  // â”€â”€ Count policy â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  /** Counted every N days. 0 = never (tools, rare parts). */
+  cycleCountDays Int @default(30)
+  minSellPrice Int?
+
+  isActive Boolean @default(true)
+  /**
+   * Internal only. Free text a staff member typed — the easiest place for a
+   * supplier, a negotiated price, or a customer's plate number to end up.
+   *
+   * CONTRACT: `notes` is stripped from every DTO that reaches a non-staff
+   * surface, exactly like `costPrice`. A `String?` has no field-level
+   * authorisation, so the guarantee must be enforced in the serializer.
+   */
+  notes    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplier   Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  level      StockLevel?
+  movements  StockMovement[]
+  reservations Reservation[]
+  counts     StockCountLine[]
+  requirements ServicePartRequirement[]
+  purchaseOrderLines PurchaseOrderLine[]
+  lots          StockLot[]
+
+  @@index([isActive, name])
+  @@index([kind])
+  @@index([size])
+  /// Superseded by \`StockLot.dotCode\` for anything batch-aware: a shelf
+  /// holds many DOT ages at once, which is why the lot was split out. Kept and
+  /// indexed so a single loose tyre can still be recorded and found.
+  @@index([dotCode])
+  @@index([brand])
+  @@index([barcode])
+  @@index([sku])
+}
+
+/**
+ * The running total. Exactly one row per product.
+ *
+ * `onHand`  â€” physically in the shop.
+ * `reserved` â€” physically present but promised to a booking.
+ * `available` â€” onHand - reserved. This is the number a promise is made against,
+ * and the ONLY number the booking flow may check.
+ *
+ * Held rather than computed on read so it can be mutated in a single
+ * conditional UPDATE, which is what makes overselling impossible.
+ */
+model StockLevel {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  onHand    Int      @default(0)
+  reserved  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([onHand])
+}
+
+/// Append-only. Never updated, never deleted.
+model StockMovement {
+  id        String @id @default(cuid())
+  productId String
+  kind      StockMovementKind
+  /** Signed. RECEIVE is +, CONSUME/ADJUST_DOWN/SHRINK are -. */
+  qty       Int
+  /** onHand AFTER this movement â€” a running total, so history is readable. */
+  onHandAfter Int
+
+  /// The reason is mandatory for anything a human did. "because" is not a reason.
+  reason    String?
+  reference String? // PO number, supplier invoice, ticket number
+
+  bookingId String?
+  /// De-duplicates a retried submit. Two taps must not double-consume.
+  idempotencyKey String? @unique
+
+  /// Which lot this movement drew from. Set on RECEIVE (opens the lot) and on
+  /// CONSUME (records WHICH batch left the shelf — required for a FIFO audit).
+  /// Nullable: an adjustment or a count correction touches no particular lot.
+  lotId     String?
+
+  actorId   String? // User.id; null for system actions
+  actorName String? // denormalised so the ledger survives a deleted account
+
+  createdAt DateTime @default(now())
+
+  product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  lot      StockLot?      @relation(fields: [lotId], references: [id], onDelete: SetNull)
+
+  @@index([lotId])
+  @@index([productId, createdAt])
+  @@index([bookingId])
+  @@index([kind, createdAt])
+  @@index([createdAt])
+}
+
+/**
+ * A soft, time-boxed hold against a booking.
+ *
+ * Why not just decrement onHand? Because the customer has not arrived yet. If
+ * the booking cancels, the hold must return â€” and if the shop never shows, the
+ * hold must expire on its own. `expiresAt` is what makes that possible without
+ * anyone having to remember.
+ */
+model Reservation {
+  id        String   @id @default(cuid())
+  productId String
+  /**
+   * The booking this hold is for, or NULL for a walk-in.
+   *
+   * Nullable because a tyre shop constantly needs to set a part aside for
+   * someone who has not booked: "hold two 205/55R16, this customer is back at
+   * four". Forcing every hold onto a booking would push the mechanic back onto
+   * paper, which is the thing this system exists to replace.
+   *
+   * A walk-in hold is still fully governed: it has the same TTL, is released by
+   * the same cron sweep, and shows up in the same reorder and availability maths.
+   * It simply has no job to be consumed against — settle it with a CONSUME and a
+   * reason, or let it expire.
+   */
+  bookingId String?
+  /**
+   * Who the walk-in hold is for — a name, a plate, "Mr. Dela Cruz".
+   *
+   * Required in practice whenever `bookingId` is null; the API refuses a
+   * nameless hold, because a reservation nobody can identify is a mystery when
+   * someone asks why a tyre is spoken for.
+   */
+  heldFor   String?
+  qty       Int
+  status    ReservationStatus @default(HELD)
+  expiresAt DateTime
+  releasedAt DateTime?
+  releasedReason String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, bookingId])
+  @@index([status, expiresAt])
+  @@index([bookingId])
+  @@index([expiresAt])
+}
+
+/// Cycle counting: count the shelf without closing the bay.
+model StockCount {
+  id        String @id @default(cuid())
+  reference String @unique // "COUNT-2026-10-04-01"
+  status    StockCountStatus @default(DRAFT)
+  scope     String @default("all") // "all" | a kind | a single productId
+  note      String?
+  startedBy String?
+  reviewedBy String?
+  postedBy  String?
+  postedAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines StockCountLine[]
+
+  @@index([status])
+}
+
+model StockCountLine {
+  id        String @id @default(cuid())
+  countId   String
+  productId String
+  /** What the system believed, snapshotted when the count was created so a
+   *  concurrent sale does not silently rewrite history. */
+  expected  Int
+  counted   Int?
+  countedBy String?
+  countedAt DateTime?
+  note      String?
+
+  count   StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  product Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([countId, productId])
+  @@index([productId])
+}
+
+/**
+ * Bill of materials: what a service physically consumes.
+ *
+ * This is what makes the inventory a *shop* system rather than a spreadsheet â€”
+ * it lets the booking flow answer "can we do this job on this date?" before the
+ * customer is promised, auto-reserve the parts, and consume them on completion.
+ */
+model ServicePartRequirement {
+  id        String @id @default(cuid())
+  serviceId String
+  productId String
+  /** Per one instance of the service. 1 oil filter per PMS = 1. */
+  qtyPerService Int @default(1)
+  /// When false, a shortage does NOT block the booking â€” it only warns.
+  /// True for safety-critical items (brake pads), false for nice-to-haves.
+  isBlocking Boolean @default(true)
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, productId])
+  @@index([productId])
+}
+// ============================================================================
+// PURCHASE ORDERS
+// ----------------------------------------------------------------------------
+// Flagged independently by the funnel and marketing agents: without this,
+// "Mark as ordered" cannot persist anything, so a low-stock row either stays on
+// the dashboard forever or disappears with no record that the shop is waiting.
+// It is also the only honest source of an arrival ETA — an invented ETA is worse
+// than no ETA, so this is what backs `ReserveResult.expectedAt`.
+// ============================================================================
+
+enum PurchaseOrderStatus {
+  DRAFT // written but not sent
+  ORDERED // sent to the supplier, awaiting delivery
+  PART_RECEIVED // some lines landed
+  RECEIVED // all lines landed
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id        String              @id @default(cuid())
+  reference String              @unique // "PO-2026-0001"
+  supplierId String?
+  status    PurchaseOrderStatus @default(DRAFT)
+  note      String?
+  /** Set when the shop says it has placed the order; drives the reorder list. */
+  orderedAt DateTime?
+  expectedAt DateTime?
+  receivedAt DateTime?
+  orderedBy  String?
+  receivedBy String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  supplier Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  lines    PurchaseOrderLine[]
+
+  @@index([status, expectedAt])
+}
+
+model PurchaseOrderLine {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  qtyOrdered Int
+  qtyReceived Int  @default(0)
+  /** Supplier unit price for this order. Never exposed to a customer surface. */
+  unitCost  Int?
+  expectedAt DateTime?
+
+  order   PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, productId])
+  @@index([productId])
+}
+
+// ============================================================================
+// STOCK LOTS
+// ----------------------------------------------------------------------------
+// Added because the research agent proved `Product.dotCode` cannot support the
+// tyre-rotation the shop depends on.
+//
+// `Product.dotCode` is ONE value per product. A shelf is many lots: 20 tyres
+// from March, 10 from August. With one dot code the shop cannot answer "which
+// tyres are over two years old", so:
+//   - FIFO is impossible — it would consume new rubber first and age the shelf;
+//   - a DOT-based clearance campaign fires on the WRONG tyres, and rubber age
+//     is a safety claim, not a discount.
+//
+// `StockLot` is one delivery of one product. It carries its own DOT code, its
+// own receipt date (shelf life is measured from RECEIPT, not from catalogue
+// entry) and its own cost. `StockMovement.lotId` ties each ledger row to the
+// lot it moved, so consumption is auditable down to which batch was used.
+//
+// NOTE: the invariant is unchanged and still per-product —
+// `available = onHand - reserved` on `StockLevel`. Lots describe WHERE the
+// stock came from, not a second source of truth for how much there is.
+// ============================================================================
+
+model StockLot {
+  id String @id @default(cuid())
+  productId String
+
+    /// Tyre DOT, `WWYY`: production WEEK then two-digit YEAR, per 49 CFR 574.5.
+  /// "1824" is week 18 of 2024. PER LOT — a shelf holds many DOT ages at once.
+  /// Per LOT. Null for non-tyres and for stock received without a readable code.
+  dotCode String?
+
+  /// When this lot physically arrived. Shelf life runs from here, NOT from
+  /// `Product.createdAt` (when a staff member typed it into the catalogue).
+  receivedAt DateTime
+
+  /// Absolute expiry for anything with a shelf life. Derived from
+  /// `Product.shelfLifeDays` on receipt, or set explicitly for a dated lot.
+  expiresAt DateTime?
+
+  /// How many arrived. Not a running balance — `StockLevel` owns the balance.
+  qtyInitial Int
+
+  /// What THIS lot cost, which may differ from the product's current cost price.
+  /// Staff-only. Never exposed on a non-staff surface.
+  unitCost Int?
+
+  /// Supplier invoice or delivery note number.
+  reference String?
+
+  isDepleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  movements StockMovement[]
+
+  @@index([productId, dotCode])
+  @@index([expiresAt])
+  @@index([receivedAt])
+}

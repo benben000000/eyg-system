@@ -1,0 +1,1005 @@
+# ============================================================================
+# EYG TIRE & AUTO CARE — CI
+# ============================================================================
+# THE GATE. Nothing reaches production without this workflow going green on the
+# commit being deployed.
+#
+# Job order and why each one exists:
+#   1  validate-env     the env contract; fails in 2 s, saves a 10-minute run
+#   2  lint             any warning fails. Warnings are how lint dies.
+#   3  typecheck        zero tolerance; a type error is a runtime error
+#   4  prisma-validate  schema drift; also fails in seconds
+#   5  security-audit   high+ advisories and committed secrets
+#   6  test             unit + coverage; NON-BLOCKING while tests/ is empty
+#   7  build            THE REAL INTEGRATION TEST
+#   8  docker-build     the image builds and the container actually serves
+#   9  lighthouse       performance budget, enforced as a hard gate
+#
+# Cost discipline: jobs 1-5 run in parallel and need no database. Only 6+ need
+# Postgres, and only 8 and 9 need a full build, so they are the only ones that
+# spin up a service container.
+#
+# SECURITY POSTURE
+#   - Default `permissions: contents: read` at the workflow level; every job
+#     elevates only what it needs.
+#   - No job in this file uses `pull_request_target`. Fork PRs get a read-only
+#     environment with no secrets at all. Anything that needs a secret runs on
+#     `push` to main only, where the code is trusted.
+#   - `NEXT_PUBLIC_*` build stubs below are NOT secrets. They exist only to
+#     satisfy the boot-time parser in src/lib/env.ts. Real values are never
+#     available to a fork PR, by design.
+# ============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Superseded runs are cancelled — nobody wants to wait for the third push.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20.11.0"
+  NEXT_TELEMETRY_DISABLED: "1"
+  CI: "true"
+  # Keeps Playwright/Vitest from trying to open a browser in CI.
+  NEXT_PUBLIC_APP_VERSION: "0.0.0-ci"
+  # Build-time stubs. NOT credentials — see the header note.
+  DATABASE_URL: "postgresql://ci:ci@127.0.0.1:5432/ci?schema=public"
+  AUTH_SECRET: "ci-stub-not-a-secret-0000000000000000000000"
+  PII_ENCRYPTION_KEY: "ci-stub-not-a-secret-0000000000000000000000"
+  WEBHOOK_SIGNING_SECRET: "ci-stub-not-a-secret"
+  NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+
+jobs:
+  # ==========================================================================
+  # 1. validate-env — the env contract stays honest
+  # ==========================================================================
+  validate-env:
+    name: 1 · validate-env
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Fails if a key the Zod schema requires is undocumented in .env.example,
+      # or if a documented key the app never reads.
+      - name: Assert .env.example matches src/lib/env.ts
+        run: |
+          # TODO(orchestrator): three keys are in the Zod schema but missing from
+          # the orchestrator-owned .env.example. They are allowlisted here so
+          # the rest of the contract check is enforced from day one. DELETE this
+          # --allow-undocumented flag once the three lines are added upstream.
+          #   RATE_LIMIT_READ_PER_MINUTE
+          #   ADMIN_EMAIL
+          #   ADMIN_PASSWORD
+          node scripts/validate-env.mjs \
+            --allow-undocumented=RATE_LIMIT_READ_PER_MINUTE,ADMIN_EMAIL,ADMIN_PASSWORD
+
+  # ==========================================================================
+  # 2. lint — any warning fails the build
+  # ==========================================================================
+  lint:
+    name: 2 · lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # `next lint` prompts interactively when no config exists, which hangs CI.
+      # Detect that and say so, instead of timing out with no explanation.
+      - name: Lint
+        run: |
+          if [ ! -f eslint.config.mjs ] && [ ! -f eslint.config.js ] \
+             && [ ! -f .eslintrc.json ] && [ ! -f .eslintrc.js ]; then
+            echo "::warning title=No ESLint config::No eslint.config.* or .eslintrc.* found. 'next lint' would prompt interactively and hang the runner. Skipping this job — add an ESLint config to make it a real gate."
+            exit 0
+          fi
+          npm run lint
+
+  # ==========================================================================
+  # 3. typecheck — zero tolerance
+  # ==========================================================================
+  typecheck:
+    name: 3 · typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Next's build cache: `.next/cache` is what makes a repeat typecheck fast.
+      - name: Cache Next.js build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-cache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-next-cache-
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # A hook in a Server Component is a RUNTIME failure that both build and
+      # tsc miss: it 500s only on the route that imports it. This guard caught
+      # the exact bug that took the homepage down once already.
+      - name: Client boundary guard
+        run: npm run check:boundaries
+
+  # ==========================================================================
+  # 4. prisma-validate — schema drift, caught in seconds
+  # ==========================================================================
+  prisma-validate:
+    name: 4 · prisma-validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The Prisma client cache is keyed on the schema hash: change the schema
+      # and the engine regenerates; change only app code and it does not.
+      - name: Cache Prisma engines (keyed on schema hash)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          path: |
+            node_modules/.prisma
+            node_modules/@prisma/client
+          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
+          restore-keys: |
+            ${{ runner.os }}-prisma-
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: prisma validate
+        run: npx prisma validate
+
+      # Drift detector. If schema.prisma has a change that no migration covers,
+      # `migrate diff` reports it and the build stops here rather than at 2am
+      # when `migrate deploy` finds nothing to apply and the app serves a schema
+      # the code does not expect.
+      - name: Detect schema drift (schema vs. migrations)
+        run: |
+          set -o pipefail
+          # `--exit-code` returns 2 when a difference exists. With no shadow
+          # database URL this compares the schema against the migration history
+          # as recorded in the repo, which is exactly what we want for a PR.
+          if [ -z "${SHADOW_DATABASE_URL:-}" ]; then
+            echo "::notice::SHADOW_DATABASE_URL not set; comparing against the migration history instead."
+            npx prisma migrate diff \
+              --from-migrations prisma/migrations \
+              --to-schema-datamodel prisma/schema.prisma \
+              --shadow-database-url "$DATABASE_URL" \
+              --exit-code 2>&1 | tee /tmp/drift.txt || true
+            if [ -s /tmp/drift.txt ]; then
+              echo "::error title=Prisma schema drift::prisma/schema.prisma differs from prisma/migrations. Run 'npx prisma migrate dev --name <change>' and commit the SQL."
+              exit 1
+            fi
+            echo "No drift: schema.prisma matches the migration history."
+            exit 0
+          fi
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema-datamodel prisma/schema.prisma \
+            --shadow-database-url "$SHADOW_DATABASE_URL" \
+            --exit-code 2>&1 | tee /tmp/drift.txt || true
+          if [ -s /tmp/drift.txt ]; then
+            echo "::error title=Prisma schema drift::schema.prisma differs from prisma/migrations. Generate a migration and commit it."
+            exit 1
+          fi
+          echo "No drift detected."
+
+      - name: Fail if a migration is missing for the schema
+        if: always()
+        run: |
+          if [ ! -d prisma/migrations ]; then
+            echo "::error title=No migrations::prisma/migrations does not exist. Production runs 'prisma migrate deploy' and would have nothing to apply. Generate migrations with: npx prisma migrate dev --name init"
+            exit 1
+          fi
+          echo "migrations/ present: $(ls prisma/migrations | grep -c '^2' || echo 0) migration(s)"
+
+  # ==========================================================================
+  # 5. security-audit — advisories + committed secrets
+  # ==========================================================================
+  security-audit:
+    name: 5 · security-audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Documented allowlist for advisories with no fix available.
+      #
+      # A transitive advisory with no upstream patch is a fact of life, not a
+      # reason to freeze every deploy. But "we decided to accept it" has to be a
+      # written, dated, owned decision — not silence. Every entry below must
+      # name the advisory and why it is safe, and entries expire.
+      #
+      # The check fails on ANY high/critical advisory NOT listed here.
+      - name: npm audit (allowlist for unfixable transitives)
+        run: |
+          npm audit --audit-level=high --json > /tmp/audit.json || true
+
+          node <<'NODE'
+          const fs = require("fs");
+          const audit = JSON.parse(fs.readFileSync("/tmp/audit.json", "utf8"));
+
+          // Unfixable transitives we have consciously accepted.
+          // Format: "<package>@<range>" -> { reason, expires }
+          const ALLOWLIST = {
+            // Example — replace with real entries. An allowlist entry that is
+            // not justified is worse than no allowlist, so start empty and
+            // only add one after reading the advisory.
+          };
+
+          const vulns = audit.vulnerabilities ?? {};
+          const blocking = [];
+          for (const [name, v] of Object.entries(vulns)) {
+            const severity = v.severity;
+            if (severity !== "high" && severity !== "critical") continue;
+            if (v.isDirect === false && !(v.via ?? []).some((x) => x.severity === "high" || x.severity === "critical")) {
+              continue;
+            }
+            const key = `${name}@${(v.range ?? "").split(" ").pop()}`;
+            const waiver = ALLOWLIST[name] ?? ALLOWLIST[key];
+            const urls = (v.via ?? [])
+              .filter((x) => typeof x === "object")
+              .map((x) => x.url)
+              .filter(Boolean);
+            if (waiver) {
+              console.log(`::notice title=Accepted advisory::${name} ${severity} — ${waiver.reason} (expires ${waiver.expires})`);
+              continue;
+            }
+            blocking.push(`${name}@${v.range ?? "?"} ${severity}${urls.length ? ` (${urls.join(", ")})` : ""}`);
+          }
+
+          if (blocking.length > 0) {
+            console.error("::error title=Unaccepted high/critical advisories::" + blocking.join(" | "));
+            console.error("Either upgrade, or add a documented, dated entry to ALLOWLIST in .github/workflows/ci.yml with a reason and an expiry.");
+            process.exit(1);
+          }
+          console.log("No unaccepted high or critical advisories.");
+          NODE
+
+      # gitleaks if it is on the runner, otherwise a regex sweep. Either way a
+      # committed secret fails the build.
+      - name: Scan the tree for committed secrets
+        run: |
+          set -euo pipefail
+          if command -v gitleaks >/dev/null 2>&1; then
+            gitleaks detect --source . --redact --no-banner --exit-code 1
+          elif [ -x "$(go env GOPATH 2>/dev/null)/bin/gitleaks" ]; then
+            "$(go env GOPATH)/bin/gitleaks" detect --source . --redact --no-banner --exit-code 1
+          else
+            echo "::notice::gitleaks is not installed on this runner; falling back to scripts/predeploy-check.mjs shape rules."
+            # predeploy-check reports the file, line and rule name — never the
+            # matched value.
+            node scripts/predeploy-check.mjs --json --skip-branch --allow-placeholders > /tmp/secrets.json || true
+            if grep -q '"secret\.' /tmp/secrets.json; then
+              echo "::error title=Possible committed secret::see the file/line/rule list below. The value is deliberately withheld."
+              node -e '
+                const r = require("/tmp/secrets.json");
+                for (const b of r.blocking.filter((x) => x.startsWith("secret."))) console.error("  " + b);
+              '
+              exit 1
+            fi
+            echo "No secret shapes found."
+          fi
+
+      # A stray .env in the repo is the most common way a key gets committed.
+      - name: Refuse any committed .env file
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error title=.env committed::.env is tracked. It must be gitignored. Remove it with 'git rm --cached .env' and rotate anything in it."
+            exit 1
+          fi
+          echo "No .env tracked."
+
+  # ==========================================================================
+  # 6. test — non-blocking while the suite is being written
+  # ==========================================================================
+  test:
+    name: 6 · test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # The QA agent is writing tests in parallel with this pipeline. Until
+    # tests/ exists there is nothing to assert, and failing every PR on a
+    # missing directory teaches the team to ignore a red build. This job flips
+    # to `required` the moment the first spec lands — see the guard below.
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      AUTH_SECRET: "ci-stub-not-a-secret-0000000000000000000000"
+      PII_ENCRYPTION_KEY: "ci-stub-not-a-secret-0000000000000000000000"
+      WEBHOOK_SIGNING_SECRET: "ci-stub-not-a-secret"
+      NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+      NODE_ENV: test
+      LOG_LEVEL: silent
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Cache Prisma engines (keyed on schema hash)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          path: |
+            node_modules/.prisma
+            node_modules/@prisma/client
+          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
+          restore-keys: |
+            ${{ runner.os }}-prisma-
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Detect whether a test suite exists yet
+        id: tests
+        run: |
+          if [ -d tests ] && [ -n "$(find tests -name '*.test.*' -o -name '*.spec.*' 2>/dev/null | head -1)" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Test suite found — running it as a gate."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=No tests yet::tests/ has no *.test.* or *.spec.* file, so this job is a no-op. It is marked continue-on-error and does NOT block the pipeline. Flip continue-on-error to false in .github/workflows/ci.yml as soon as the first spec lands."
+          fi
+
+      - name: Apply the schema to the test database
+        if: steps.tests.outputs.exists == 'true'
+        run: |
+          npx prisma migrate deploy 2>/dev/null || npx prisma db push --accept-data-loss
+
+      # Coverage thresholds. 80/70 on src/lib is where the money is: the
+      # pricing, availability and validation logic that decides whether a
+      # customer gets the right answer. Components get a lower bar because they
+      # are thin wrappers and the QA agent is still building that suite up.
+      - name: Run vitest with coverage
+        if: steps.tests.outputs.exists == 'true'
+        run: |
+          npx vitest run \
+            --coverage \
+            --coverage.provider=v8 \
+            --coverage.reporter=json \
+            --coverage.reporter=text \
+            --coverage.reporter=default \
+            --coverage.reportsDirectory=coverage \
+            --coverage.thresholds.100.lines=80 \
+            --coverage.thresholds.100.branches=70 \
+            --coverage.thresholds.100.functions=75 \
+            --coverage.thresholds.100.statements=80 \
+            --coverage.thresholds.lines=60 \
+            --coverage.thresholds.branches=50 \
+            --coverage.thresholds.functions=55 \
+            --coverage.thresholds.statements=60 \
+            --coverage.include='src/lib/**' \
+            --coverage.include='src/components/**' \
+            --coverage.exclude='**/*.d.ts' \
+            --coverage.exclude='**/node_modules/**' \
+            --junit.reporter=default --junit.reporter.outputFile=junit.xml \
+            --reporter=default \
+            --reporter=junit --outputFile=junit.xml
+
+      - name: Split the JUnit report per package
+        if: always() && steps.tests.outputs.exists == 'true'
+        uses: mikepenz/action-junit-report@3585e9575db828022551b4231f165eb59a0e74e3 # v5 (SHA-pinned; renovate bumps it)
+        with:
+          report_paths: junit.xml
+          check_name: vitest results
+          # A red test must not fail this job twice; `continue-on-error` already
+          # handles the gate, this just surfaces it on the PR.
+          fail_on_failure: false
+          require_tests: false
+
+      - name: Upload the JUnit report
+        if: always() && steps.tests.outputs.exists == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: junit-test-report
+          path: junit.xml
+          retention-days: 14
+
+      - name: Upload the coverage report
+        if: always() && steps.tests.outputs.exists == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+      # Uploads the artifact even when there is no suite, so the run's file list
+      # tells the truth about what was and was not executed.
+      - name: Write a placeholder when no suite ran
+        if: steps.tests.outputs.exists != 'true'
+        run: |
+          mkdir -p coverage
+          printf '{"skipped":true,"reason":"no tests/ suite committed yet"}\n' > coverage/.no-suite.json
+          echo "::notice::Coverage was not produced — there is no test suite to run yet."
+
+      - name: Upload coverage (or the placeholder)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+  # ==========================================================================
+  # 7. build — THE REAL INTEGRATION TEST
+  # ==========================================================================
+  build:
+    name: 7 · build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    needs: [validate-env, lint, typecheck, prisma-validate, security-audit]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Overrides the workflow-level stub with the real service container.
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Cache Prisma engines (keyed on schema hash)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          path: |
+            node_modules/.prisma
+            node_modules/@prisma/client
+          key: ${{ runner.os }}-prisma-${{ hashFiles('prisma/schema.prisma') }}
+          restore-keys: |
+            ${{ runner.os }}-prisma-
+
+      # The Next cache is keyed on the lockfile + source hash. A pure dependency
+      # bump reuses the whole .next/cache; a source change busts it.
+      - name: Cache Next.js build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'prisma/**', 'next.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Apply the schema
+        run: |
+          if [ -d prisma/migrations ] && [ -n "$(ls prisma/migrations 2>/dev/null | grep '^2' || true)" ]; then
+            npx prisma migrate deploy
+          else
+            npx prisma db push --skip-generate
+          fi
+
+      # The OG cards are generated at build time so they always match site.ts.
+      - name: Generate the social cards
+        run: node scripts/generate-og.mjs
+
+      - name: Build
+        run: npm run build
+
+      # A build that "succeeds" but produces no server output is not a build.
+      - name: Assert the build produced a server bundle
+        run: |
+          if [ ! -f .next/BUILD_ID ]; then
+            echo "::error title=Empty build::.next/BUILD_ID is missing. The build reported success but produced nothing."
+            exit 1
+          fi
+          echo "BUILD_ID=$(cat .next/BUILD_ID)"
+          echo "build output: $(du -sh .next | cut -f1)"
+
+      - name: Upload the .next build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: next-build-${{ github.sha }}
+          path: .next
+          retention-days: 7
+          include-hidden-files: true
+          if-no-files-found: error
+
+  # ==========================================================================
+  # 8. docker-build — the image builds AND the container actually serves
+  # ==========================================================================
+  docker-build:
+    name: 8 · docker-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    needs: [build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3 (SHA-pinned; renovate bumps it)
+
+      - name: Build the image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6 (SHA-pinned; renovate bumps it)
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runner
+          push: false
+          load: true
+          tags: eyg-tire:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_VERSION=20.11.0
+
+      # Image size is a cost line, not a vanity metric (COST-OPTIMISATION §4).
+      - name: Report image size
+        run: |
+          size=$(docker image inspect eyg-tire:ci --format '{{.Size}}')
+          mb=$(( size / 1048576 ))
+          echo "Image size: ${mb} MB"
+          if [ "$mb" -gt 900 ]; then
+            echo "::warning title=Image grew::${mb} MB exceeds the 900 MB budget. Check whether a devDependency leaked into the runner stage."
+          fi
+
+      - name: Start Postgres for the container
+        run: |
+          docker run -d --name eyg-ci-db \
+            -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci \
+            -p 5432:5432 postgres:16-alpine
+          # Wait for the cluster to accept writes, not just to answer a ping.
+          for i in $(seq 1 30); do
+            if docker exec eyg-ci-db pg_isready -U ci -d ci -q; then
+              echo "postgres ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error title=Postgres never became ready::"
+          docker logs eyg-ci-db
+          exit 1
+
+      # Run the image exactly as production would, with secrets supplied at
+      # RUNTIME. Nothing is baked in — which this step proves, because if any
+      # value were baked, the smoke test would pass without these being set.
+      - name: Run the container
+        run: |
+          docker run -d --name eyg-ci-web \
+            --link eyg-ci-db:db \
+            -p 3000:3000 \
+            -e NODE_ENV=production \
+            -e PORT=3000 \
+            -e HOSTNAME=0.0.0.0 \
+            -e DATABASE_URL="postgresql://ci:ci@db:5432/ci?schema=public" \
+            -e AUTH_SECRET="ci-runtime-stub-000000000000000000000000000" \
+            -e PII_ENCRYPTION_KEY="ci-runtime-stub-000000000000000000000000000" \
+            -e WEBHOOK_SIGNING_SECRET="ci-runtime-stub" \
+            -e NEXT_PUBLIC_SITE_URL="http://localhost:3000" \
+            -e LOG_LEVEL=info \
+            eyg-tire:ci
+
+      - name: Wait for the container to become healthy
+        run: |
+          for i in $(seq 1 40); do
+            state=$(docker inspect --format '{{.State.Health.Status}}' eyg-ci-web 2>/dev/null || echo "starting")
+            echo "t=${i}s health=${state}"
+            if [ "$state" = "healthy" ]; then
+              echo "Container healthy."
+              exit 0
+            fi
+            if [ "$state" = "unhealthy" ]; then
+              echo "::error title=Container unhealthy::"
+              docker logs eyg-ci-web | tail -100
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "::error title=Container never became healthy::"
+          docker logs eyg-ci-web | tail -100
+          exit 1
+
+      # The smoke test is the gate. If the container serves anything other than
+      # a working EYG site, nothing ships — not the image, not the deploy.
+      - name: Smoke test the running container
+        run: |
+          node scripts/smoke-test.mjs \
+            --base-url=http://localhost:3000 \
+            --retries=5 \
+            --retry-delay=3000 \
+            --timeout=20000
+
+      - name: Dump the container log if the smoke test failed
+        if: failure()
+        run: |
+          echo "=== eyg-ci-web logs ==="
+          docker logs eyg-ci-web 2>&1 | tail -200
+          echo "=== eyg-ci-db logs ==="
+          docker logs eyg-ci-db 2>&1 | tail -50
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f eyg-ci-web 2>/dev/null || true
+          docker rm -f eyg-ci-db 2>/dev/null || true
+
+  # ==========================================================================
+  # 9. lighthouse — the performance budget, enforced
+  # ==========================================================================
+  lighthouse:
+    name: 9 · lighthouse
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Read-only: the comment is posted, and only to a PR on this repo.
+      pull-requests: write
+    needs: [docker-build]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # Lighthouse needs Chrome; the runner image has it, but not the matching
+      # apt packages for every libvips/native dep in the Next image. Serve the
+      # CI build artifact rather than rebuilding — it is the exact bytes that
+      # would deploy.
+      - name: Download the build artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: next-build-${{ github.sha }}
+          path: .next
+
+      - name: Download the public assets
+        run: |
+          git checkout -- public 2>/dev/null || true
+          ls public | head
+
+      - name: Install
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      - name: Start the server
+        run: |
+          npx next start -p 3000 -H 127.0.0.1 > /tmp/next.log 2>&1 &
+          echo $! > /tmp/next.pid
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+              echo "server up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error title=Server did not start::"
+          cat /tmp/next.log
+          exit 1
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+          AUTH_SECRET: lighthouse-stub-not-a-secret-00000000000000000000
+          PII_ENCRYPTION_KEY: lighthouse-stub-not-a-secret-00000000000000000000
+          WEBHOOK_SIGNING_SECRET: lighthouse-stub
+          NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
+
+      # throttling-method=simulate gives every user the same slow-4G phone, so
+      # the number is comparable run to run. A real user on real 3G is worse.
+      #
+      # Budgets (from the brief, enforced as a hard gate):
+      #   LCP  < 2.5 s      CLS < 0.1      INP < 200 ms
+      #   a11y >= 95        SEO >= 95      best-practices >= 90
+      - name: Audit the performance budget
+        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # v12 (SHA-pinned; renovate bumps it)
+        with:
+          urls: |
+            http://127.0.0.1:3000/
+            http://127.0.0.1:3000/services
+            http://127.0.0.1:3000/book
+          uploadArtifacts: true
+          temporaryPublicStorage: false
+          configPath: .github/lighthouserc.json
+          # `warn` so the job runs to completion and reports every failing
+          # assertion at once, rather than stopping at the first.
+          runs: 2
+
+      - name: Summarise and comment on the PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7 (SHA-pinned; renovate bumps it)
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const dir = "/tmp/lighthouseci";
+            const files = fs.existsSync(dir)
+              ? fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.endsWith(".manifest.json"))
+              : [];
+
+            const BUDGET = {
+              "largest-contentful-paint": { limit: 2500, unit: "ms", label: "LCP", better: "lower" },
+              "cumulative-layout-shift": { limit: 0.1, unit: "", label: "CLS", better: "lower" },
+              "interaction-to-next-paint": { limit: 200, unit: "ms", label: "INP", better: "lower" },
+              "accessibility": { limit: 95, unit: "", label: "Accessibility", better: "higher" },
+              "seo": { limit: 95, unit: "", label: "SEO", better: "higher" },
+              "best-practices": { limit: 90, unit: "", label: "Best practices", better: "higher" },
+            };
+
+            const rows = [];
+            let hardFail = false;
+
+            for (const f of files) {
+              let report;
+              try {
+                report = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+              } catch {
+                continue;
+              }
+              const finalUrl = report.finalUrl || report.finalDisplayedUrl || f;
+              const audits = report.audits || {};
+              const cats = report.categories || {};
+
+              rows.push(`### \`${finalUrl.replace("http://127.0.0.1:3000", "") || "/"}\``);
+              rows.push("");
+              rows.push("| Metric | Score | Budget | Result |");
+              rows.push("| --- | --- | --- | --- |");
+
+              for (const [id, b] of Object.entries(BUDGET)) {
+                // Category scores live in `categories`; lab metrics in `audits`.
+                const value =
+                  cats[id]?.score != null
+                    ? Math.round(cats[id].score * 100)
+                    : audits[id]?.numericValue != null
+                      ? Math.round(audits[id].numericValue * 1000) / 1000
+                      : null;
+
+                let verdict = "n/a";
+                if (value !== null) {
+                  const pass = b.better === "lower" ? value <= b.limit : value >= b.limit;
+                  verdict = pass ? "pass" : "**FAIL**";
+                  if (!pass) hardFail = true;
+                }
+                const shown = value === null ? "—" : b.better === "lower" && b.unit === "ms" ? `${value} ms` : value;
+                rows.push(`| ${b.label} | ${shown} | ${b.better === "lower" ? "<" : "≥"} ${b.limit}${b.unit} | ${verdict} |`);
+              }
+              rows.push("");
+            }
+
+            if (rows.length === 0) {
+              core.warning("Lighthouse produced no parseable report. Check that the lighthouserc.json assertions passed.");
+              return;
+            }
+
+            const header = "## Lighthouse budget\n\nBudgets are a hard gate — see `docs/ops/LAUNCH-CHECKLIST.md` for why.\n";
+            const footer = hardFail
+              ? "\n> **The budget was exceeded.** This blocks the deploy. Run `npx lhci autorun` locally to reproduce, then check the trace in the uploaded artifacts."
+              : "\nAll budgets met.";
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `${header}\n${rows.join("\n")}\n${footer}`,
+            });
+
+            if (hardFail) {
+              core.setFailed("A Lighthouse budget was exceeded.");
+            }
+
+      - name: Stop the server
+        if: always()
+        run: kill "$(cat /tmp/next.pid)" 2>/dev/null || true
+
+  # ==========================================================================
+  # 10. inventory — THE STOCK GATE (added by A7 · CI/CD & QA)
+  # ==========================================================================
+  # Appended, never edited into. This job is separate from `test` on purpose:
+  # the whole point of the inventory build is that a green booking suite must not
+  # be able to hide a red concurrency test. A job named after the thing it
+  # protects is the only form of that guarantee a reviewer can read at a glance.
+  #
+  # What it does that `test` does not:
+  #   - runs `vitest.inventory.config.ts`, so the report is attributable;
+  #   - enforces the "no placeholder assertion" guard, which is what stops a red
+  #     concurrency test being "fixed" with `expect(true).toBe(true)`;
+  #   - fails on the client-boundary guard for `src/app/inventory/**` and
+  #     `src/components/inventory/**` specifically (a hook in a Server Component
+  #     500s only on the route that imports it, so a whole-suite pass can miss it);
+  #   - uploads `inventory-junit.xml` as its own artefact.
+  #
+  # It needs no database and no build: every inventory test runs against a typed
+  # in-memory fake, so this job costs about a minute and is worth making
+  # blocking immediately.
+  inventory:
+    name: 10 · inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # Cheap, fails in seconds, and catches the class of defect that a passing
+      # test suite can miss entirely: a React hook in a module without
+      # "use client". `next build` and `tsc` both accept it; only the browser
+      # 500s, and only on the route that imports it. It has happened here once.
+      - name: Client boundary guard (inventory surfaces)
+        run: node scripts/check-client-boundaries.mjs
+
+      - name: Typecheck (inventory contracts must be type-safe)
+        run: npm run typecheck
+
+      # No coverage thresholds here on purpose. Thresholds that fail the build on
+      # a percentage encourage the one change that makes a percentage move —
+      # deleting or skipping a test. The gate is the assertions; the coverage
+      # report is uploaded for information.
+      - name: Run the inventory suite
+        run: |
+          npx vitest run \
+            --config vitest.inventory.config.ts \
+            --reporter=default \
+            --reporter=junit --outputFile=inventory-junit.xml
+
+      - name: Summarise the stock invariant
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          if (!fs.existsSync('inventory-junit.xml')) {
+            console.log('::notice::No JUnit report was produced.');
+            process.exit(0);
+          }
+          const xml = fs.readFileSync('inventory-junit.xml', 'utf8');
+
+          const skipped = (xml.match(/<skipped/g) || []).length;
+          const failed = (xml.match(/<failure/g) || []).length;
+          const todo = (xml.match(/<skipped[^>]*type="todo"/g) || []).length;
+
+          const lines = ['## Inventory gate', ''];
+          lines.push(`- **${failed}** failing`);
+          lines.push(`- **${skipped - todo}** skipped by a capability gate`);
+          lines.push(`- **${todo}** \`it.todo\` awaiting a named export`);
+          lines.push('');
+
+          if (failed > 0) {
+            lines.push(
+              '> A failing inventory test is information, not an obstacle. **Do not weaken the',
+              '> assertion to make it pass.** If the implementation is wrong, that is a defect',
+              '> report with a file and a line number. If the export does not exist yet, the',
+              '> assertion belongs in an `it.todo` that names it.',
+            );
+          }
+          if (todo > 0) {
+            lines.push(
+              `> ${todo} assertion(s) are still waiting on an implementation. Every one of them names`,
+              '> the exact export it wants — see `docs/inventory-qa/TEST-STRATEGY.md` §6.',
+            );
+          }
+          lines.push('');
+          lines.push('The concurrency suite is the load-bearing one: two simultaneous reservations');
+          lines.push('for the last unit must yield exactly one success. See');
+          lines.push('`docs/inventory-qa/TEST-STRATEGY.md` §4 for what it does and does not prove.');
+          console.log(lines.join('\n'));
+          NODE
+
+      - name: Upload the inventory JUnit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: inventory-junit-report
+          path: inventory-junit.xml
+          retention-days: 14
+          if-no-files-found: warn

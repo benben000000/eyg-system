@@ -1,0 +1,184 @@
+# ============================================================================
+# EYG Tire & Auto Care — bug report
+# ============================================================================
+# This form is for the WEBSITE breaking. For a car problem, the customer needs
+# a phone, not a GitHub issue — the site's primary conversion is a tap-to-call
+# and the fallback card (printed, by the shop) exists for exactly that case.
+# ============================================================================
+
+name: Bug report
+description: Something on the website is broken or wrong
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this.
+
+        **If the booking form is down and you are at the shop right now:** call
+        or message the shop on the number printed on the counter card. The
+        website being broken does not stop the shop taking bookings by phone.
+
+  # ---------------------------------------------------------------------------
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How broken is this?
+      description: Be honest — it changes who handles this and how fast.
+      options:
+        - "SEV1 — The site is down, or booking is impossible for everyone"
+        - "SEV2 — Booking is broken, but the rest of the site works"
+        - "SEV3 — Something looks or reads wrong, but I could still book"
+        - "SEV4 — A cosmetic nit or a typo"
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the site?
+      options:
+        - "Home page (/)"
+        - "Services or pricing (/services)"
+        - "Booking flow (/book)"
+        - "Deals or promotions (/deals)"
+        - "Contact, map or directions (/contact)"
+        - "Gallery (/gallery)"
+        - "About (/about)"
+        - "Admin bookings board (/admin)"
+        - "Privacy or terms"
+        - "An API call — I saw it in the browser console"
+        - "Something else"
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: input
+    id: url
+    attributes:
+      label: Which page URL?
+      placeholder: "https://eygtireautocare.ph/book"
+      description: The full URL from the address bar, if you have it.
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: >
+        What you did, what you expected to happen, and what happened instead.
+        Concrete is better than technical.
+      placeholder: |
+        I picked "PMS A" for Tuesday 2pm, entered my number, and pressed
+        Confirm. The button spun for about 10 seconds and then the page showed
+        "Something went wrong". No booking appeared when I tried again.
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: input
+    id: device
+    attributes:
+      label: What device and browser?
+      placeholder: "Samsung A14, Chrome 122, Android 13"
+      description: >
+        Mobile matters most — most customers are on a phone, on mobile data.
+        If you know whether you were on wifi or mobile data, say so.
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: dropdown
+    id: network
+    attributes:
+      label: Were you on mobile data or wifi?
+      options:
+        - "Mobile data (3G/4G)"
+        - "Wifi"
+        - "Not sure"
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot or error text
+      description: >
+        Drag the file in, or paste the exact text of any error message. An
+        error message is more useful than a screenshot of one.
+    render: markdown
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: checkboxes
+    id: customer-impact
+    attributes:
+      label: Did this cost anyone a booking?
+      options:
+        - label: A customer could not book and had to be handled another way
+        - label: A booking was created twice
+        - label: A booking was created with the wrong details
+        - label: A confirmation message did not arrive
+        - label: I do not know yet
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: input
+    id: when
+    attributes:
+      label: When did you first notice this?
+      placeholder: "Today around 10am Manila time"
+      description: "Including the timezone helps — the shop is in Asia/Manila."
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console output (if you can get it)
+      description: >
+        Open developer tools → Console, reproduce the problem, then copy what
+        appears. On a phone this is hard; skip it and someone else can
+        reproduce from the description above.
+      render: shell
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: >
+            I searched the open issues and this is not already reported
+          required: true
+        - label: >
+            I did NOT include any customer's name, phone number, email address
+            or vehicle details in this report
+          description: >
+            This repository is public. Customer PII must not be posted in an
+            issue. If a booking is involved, reference it by its EYG- code
+            only.
+          required: true
+        - label: I can reproduce this more than once
+          required: false

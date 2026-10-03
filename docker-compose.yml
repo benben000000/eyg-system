@@ -1,0 +1,226 @@
+# ============================================================================
+# EYG Tire & Auto Care — local development stack
+# ============================================================================
+#   docker compose up -d          → http://localhost:3000, database seeded
+#   docker compose down           → stop, keep the data
+#   docker compose down -v        → stop and DELETE the database volume
+#
+# Three services:
+#   postgres   16-alpine, named volume, healthcheck, data under PGDATA
+#   redis      7-alpine, optional — the Upstash-compatible rate limiter.
+#              `docker compose up` without it still works: the app falls back
+#              to a Postgres counter, which is slower but correct.
+#   web        the Next server, waits for postgres to report healthy
+#
+# ---------------------------------------------------------------------------
+# REQUIRED ENV
+#
+# There is deliberately NO `.env.docker.example` (see the brief). Create
+# `.env.docker.local` yourself — compose reads it automatically — or export the
+# variables in your shell. Everything needed for `docker compose up` to serve a
+# seeded site:
+#
+#   DATABASE_URL               postgresql://eyg:eyg_dev_password@localhost:5432/eyg?schema=public
+#   AUTH_SECRET                openssl rand -base64 48       (>= 32 chars)
+#   PII_ENCRYPTION_KEY         openssl rand -hex 32          (>= 32 chars)
+#   WEBHOOK_SIGNING_SECRET     openssl rand -base64 32       (>= 16 chars)
+#   NEXT_PUBLIC_SITE_URL       http://localhost:3000
+#
+# OPTIONAL (all default to off; the site boots and converts without them)
+#   UPSTASH_REDIS_REST_URL/TOKEN   unused locally — compose's redis is reached
+#                                 in-process, so leave these EMPTY and let the
+#                                 Postgres rate limiter run.
+#   RESEND_API_KEY / SMTP_*       booking confirmations log as "skipped"
+#   TWILIO_*                      SMS confirmations log as "skipped"
+#   CAPTCHA_ENABLED               defaults to true (arithmetic challenge)
+#   ADMIN_IP_ALLOWLIST            CIDR list for /admin. Empty = disabled.
+#   LOG_LEVEL                     debug | info | warn | error | silent
+#
+# Copy-paste bootstrap:
+#   printf 'AUTH_SECRET=%s\nPII_ENCRYPTION_KEY=%s\nWEBHOOK_SIGNING_SECRET=%s\n' \
+#     "$(openssl rand -base64 48)" "$(openssl rand -hex 32)" "$(openssl rand -base64 32)" \
+#     >> .env.docker.local
+#
+# Full table with where to get every key: docs/ops/DEPLOYMENT.md §4.
+# ============================================================================
+
+name: eyg
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-eyg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eyg_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-eyg}
+      # Deterministic collation regardless of the host's locale. Without this,
+      # a dump taken on one machine can fail to restore on another.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+      # Speeds up initdb and writes. Safe for a dev database only.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      # Named volume — this is the "persisted data directory". `docker compose
+      # down` keeps it; only `down -v` destroys it. That asymmetry is the
+      # difference between restarting and losing every booking.
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Bound to loopback on purpose: nothing outside this machine has any
+      # business reaching the dev database.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      # `pg_isready` alone returns true before the database accepts writes.
+      # The `-U`/`-d` pair checks the specific database actually exists.
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-eyg} -d ${POSTGRES_DB:-eyg} -h 127.0.0.1 -q",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      # 60 s: the first initdb on a cold volume takes ~20-30 s. Starting the
+      # web container against a half-initialised cluster produces a confusing
+      # "database system is starting up" failure instead of a clear wait.
+      start_period: 60s
+    shm_size: 256mb
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    profiles: ["rate-limit"]
+    # appendonly: the rate-limit counter is disposable. Losing it must never
+    # lose a booking, so this stays off and memory is the store.
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        NODE_VERSION: "20.11.0"
+    image: eyg-tire:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        # `service_healthy`, NOT `service_started`: `web` must not run a single
+        # query until Postgres has finished initdb and reports healthy.
+        condition: service_healthy
+        restart: true
+      redis:
+        condition: service_healthy
+        # Optional service — do not block the web container on it.
+        required: false
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Inside the compose network the host is the service name, not localhost.
+      DATABASE_URL: >-
+        postgresql://${POSTGRES_USER:-eyg}:${POSTGRES_PASSWORD:-eyg_dev_password}@postgres:5432/${POSTGRES_DB:-eyg}?schema=public&connection_limit=5&pool_timeout=10
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-0.0.0-local}
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
+      NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
+      NEXT_PUBLIC_PLAUSIBLE_DOMAIN: ${NEXT_PUBLIC_PLAUSIBLE_DOMAIN:-}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+
+      # Secrets — no defaults. `:?` fails the compose parse with a named error
+      # rather than booting with a null AUTH_SECRET.
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env.docker.local — openssl rand -base64 48}
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:?set PII_ENCRYPTION_KEY in .env.docker.local — openssl rand -hex 32}
+      WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:?set WEBHOOK_SIGNING_SECRET in .env.docker.local — openssl rand -base64 32}
+
+      # Rate limiting. The Postgres fallback is the default; the Redis path is
+      # opt-in because it needs the `rate-limit` profile.
+      RATE_LIMIT_PUBLIC_PER_MINUTE: ${RATE_LIMIT_PUBLIC_PER_MINUTE:-60}
+      RATE_LIMIT_BOOKING_PER_HOUR: ${RATE_LIMIT_BOOKING_PER_HOUR:-20}
+      RATE_LIMIT_QUOTE_PER_HOUR: ${RATE_LIMIT_QUOTE_PER_HOUR:-30}
+      RATE_LIMIT_LOGIN_PER_15MIN: ${RATE_LIMIT_LOGIN_PER_15MIN:-8}
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-true}
+      CAPTCHA_TTL_SECONDS: ${CAPTCHA_TTL_SECONDS:-600}
+
+      # Notifications — empty means "log as skipped", never "boot fails".
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      GOOGLE_PLACE_ID: ${GOOGLE_PLACE_ID:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${FACEBOOK_PAGE_ACCESS_TOKEN:-}
+
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      ADMIN_IP_ALLOWLIST: ${ADMIN_IP_ALLOWLIST:-}
+    # Bounded, so a runaway dev render cannot eat the whole machine.
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--spider",
+          "--tries=1",
+          "--timeout=4",
+          "http://127.0.0.1:3000/api/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 45s
+    # Next writes its cache and its standalone output here. Without a volume the
+    # image layer is the only writable path and ISR thrashes on every restart.
+    tmpfs:
+      - /tmp:size=256m
+    security_opt:
+      # Drop every capability the process never needs. A Next server binds one
+      # port and writes one temp file; it does not need NET_BIND_SERVICE
+      # because it runs as uid 1001 on port 3000.
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
+    name: eyg_pgdata
+  redisdata:
+    name: eyg_redisdata

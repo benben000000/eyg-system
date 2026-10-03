@@ -1,0 +1,140 @@
+# ============================================================================
+# EYG TIRE & AUTO CARE — Dependabot
+# ============================================================================
+# Dependabot and Renovate both manage dependencies (see renovate.json). Only
+# ONE of them should be active — two bots opening PRs for the same package is
+# how a security update gets lost in the noise.
+#
+# RECOMMENDED SETUP
+#   1. Prefer Renovate (renovate.json) as the single bot. It understands the
+#      regexManagers in that file, groups majors, and has a dependency
+#      dashboard. Enable it with a GitHub App and DO NOT enable
+#      Dependabot version updates for `npm` in this file.
+#   2. Keep this file for the ecosystems Renovate cannot see: GitHub Actions
+#      used by Dependabot has better SHA-update behaviour for the actions in
+#      this repo, and `github-actions` here is scoped to the workflows.
+#   3. If you would rather have one bot: delete this file and let Renovate own
+#      github-actions too (it is already configured there with pinDigests).
+#
+# Grouping strategy
+#   - Patch/minor of devDependencies: many small PRs are fine, they are the
+#     cheap half of staying current.
+#   - Runtime dependencies: grouped, because a dependency bump in a production
+#     site should ship with its tests and its typecheck in one reviewable diff.
+#   - GitHub Actions: grouped by kind, because a workflow change is a supply
+#     chain change and should be reviewed in isolation from app code.
+# ============================================================================
+
+version: 2
+
+updates:
+  # --------------------------------------------------------------------------
+  # npm — only if you are NOT running Renovate. See the header note.
+  # --------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      # Monday 05:00 Manila. A weekly cron is enough: this is a marketing site
+      # with a small dependency surface, not a security product.
+      day: monday
+      time: "05:00"
+      timezone: Asia/Manila
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: scope
+    labels:
+      - dependencies
+      - npm
+    groups:
+      # Runtime deps move together: they ship as one release or they do not
+      # ship at all.
+      production-dependencies:
+        dependency-type: production
+        patterns:
+          - "*"
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # A major of the framework layer needs a human reading the changelog.
+      - dependency-name: next
+        update-types:
+          - version-update:semver-major
+      - dependency-name: react
+        update-types:
+          - version-update:semver-major
+      - dependency-name: react-dom
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "@prisma/client"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: prisma
+        update-types:
+          - version-update:semver-major
+
+  # --------------------------------------------------------------------------
+  # GitHub Actions
+  # --------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Asia/Manila
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+      - github-actions
+      - ci
+    groups:
+      # Keep workflow edits reviewable as their own diff.
+      github-actions:
+        patterns:
+          - "*"
+    # Every action in this repo is SHA-pinned, so Dependabot's job is to move
+    # the SHA and the trailing version comment together. It does this natively;
+    # Renovate needs `pinDigests` (already set in renovate.json).
+    #
+    # `insecure-external-code-execution` is NOT suppressed: a workflow that
+    # checks out a fork head and runs it with a token is the exact supply-chain
+    # attack this repo's least-privilege posture exists to prevent.
+
+  # --------------------------------------------------------------------------
+  # Docker
+  #
+  # The base image is `node:20.11.0-alpine3.21` in the Dockerfile ARG, and
+  # `postgres:16-alpine` in docker-compose.yml. Dependabot understands the ARG
+  # form; renovate.json also has a regexManager for it as a belt-and-braces.
+  # --------------------------------------------------------------------------
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Asia/Manila
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(docker)"
+    labels:
+      - dependencies
+      - docker
+    groups:
+      docker-base:
+        patterns:
+          - "*"
+    ignore:
+      # Node major bumps change the Alpine base and the Prisma engine ABI. Those
+      # are a deliberate, tested upgrade, not an automated one.
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major

@@ -1,0 +1,152 @@
+# ============================================================================
+# EYG Tire & Auto Care — feature request
+# ============================================================================
+# The bar for a feature on this site is not "would it be nice" — it is
+# "does it help a customer who is currently stranded on the side of EGSA Fourlanes
+# get to a human faster".
+#
+# If a proposal cannot be traced to a conversion path (tap-to-call, book a bay,
+# claim an offer, get directions) or to a business fact the owner has to state
+# correctly, it will be declined. That is not gatekeeping; it is the brief.
+# ============================================================================
+
+name: Feature request
+description: Suggest a change or improvement
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you open this: the shop takes bookings by phone at any time, and
+        that is deliberate. The website exists to make that phone call easier to
+        start — not to replace the person answering it.
+
+  # ---------------------------------------------------------------------------
+  - type: dropdown
+    id: conversion-path
+    attributes:
+      label: Which part of the conversion ladder does this help?
+      description: Pick the closest one. If none fit, that is worth knowing.
+      options:
+        - "LANE A — Emergency: a stranded customer reaching a human faster"
+        - "LANE B — Planned: getting an instant quote and booking a bay"
+        - "LANE C — Re-engagement: someone who came for a promo"
+        - "Trust and proof — reviews, warranty, photos of real work"
+        - "Shop operations — internal, staff-facing, no customer impact"
+        - "None of these / I am not sure"
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >
+        Describe the customer's situation, not the feature. "Someone needs
+        tyres at 6am and the shop opens at 8" is a problem. "Add a dark mode
+        toggle" is a solution looking for a problem.
+      placeholder: |
+        A customer whose tyre is flat at 6am on EGSA Fourlanes opens the site
+        and sees opening hours but has no way to know if anyone is actually in
+        the bay, so they drive on to Tuyo and lose 40 minutes.
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      description: What the customer sees or does, concretely.
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you already considered?
+      description: >
+        Including "do nothing" as a real option, with a note on why it is not
+        enough. Doing nothing is frequently correct.
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: dropdown
+    id: owner-facts
+    attributes:
+      label: Does this need a fact the shop owner has to confirm?
+      description: >
+        A real price, a real warranty period, a real brand partnership, real
+        hours, real photos. The project brief forbids inventing any of these.
+      options:
+        - "No — this uses only facts already on the site"
+        - "Yes — it needs a price, a service, or a package"
+        - "Yes — it needs hours, a phone number, or an address"
+        - "Yes — it needs a warranty, rating, or partner brand claim"
+        - "Yes — it needs real photos with the customer's consent"
+        - "I do not know yet"
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: dropdown
+    id: mobile
+    attributes:
+      label: How does this behave on a ₱3,000 Android over 3G?
+      description: >
+        Most customers are on a phone, on mobile data, often in a car on a
+        provincial road. "It is a small extra request" is a real cost there.
+      options:
+        - "Works offline or on a very slow connection"
+        - "Needs a page load, but no more than the current site"
+        - "Adds a noticeable wait or extra data"
+        - "I have not thought about this"
+    validations:
+      required: true
+
+  # ---------------------------------------------------------------------------
+  - type: checkboxes
+    id: a11y
+    attributes:
+      label: Accessibility and performance
+      options:
+        - label: >
+            This does not rely on colour alone to convey meaning
+          description: WCAG 2.2 AA is a requirement, not a preference.
+        - label: This respects prefers-reduced-motion
+        - label: This adds no layout shift (CLS stays under 0.1)
+        - label: This is keyboard-navigable and screen-reader legible
+        - label: Not sure — please check this for me
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Mockup, sketch or example
+      description: >
+        A rough sketch is more useful than nothing. A screenshot of a
+        competitor is fine for inspiration, but do not copy their layout.
+      render: markdown
+    validations:
+      required: false
+
+  # ---------------------------------------------------------------------------
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+    options:
+        - label: I searched the open issues and this has not been suggested
+          required: true
+        - label: >
+            I did NOT include any customer's personal details in this request
+          required: true
+        - label: >
+            I understand that pricing, hours and warranty claims cannot be added
+            until the shop owner confirms them
+          required: false

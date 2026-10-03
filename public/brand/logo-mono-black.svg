@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="55 266 585 168" width="585" height="168" role="img" aria-label="EYG Tire and Auto Care">
+  <title>EYG Tire &amp; Auto Care</title>
+  
+  <g id="wheel-mark">
+    <g transform="rotate(11.4 85 317.5)">
+      <g fill="#06060A">
+        <path d="M82.67 268.06 L87.34 266.18 L87.83 262.67 L82.17 264.95 Z M91.26 265.53 L95.69 265.89 L97.01 261.66 L91.34 261.21 Z M99.35 267.16 L103.2 269.67 L105.5 265.23 L100.29 261.84 Z M106.29 272.81 L109.27 277.22 L112.55 273.23 L108.3 266.93 Z M111.53 282.02 L113.43 287.96 L117.56 285.12 L114.71 276.21 Z M114.65 294.08 L115.34 301.02 L120.03 300.05 L118.94 289.07 Z M115.41 308 L114.86 315.39 L119.69 316.88 L120.6 304.58 Z M113.73 322.68 L112.02 329.92 L116.49 334.25 L119.48 321.58 Z M109.76 336.95 L107.05 343.47 L110.59 350.75 L115.57 338.75 Z M103.81 349.67 L100.34 354.98 L102.42 364.99 L109.12 354.73 Z M96.35 359.81 L92.42 363.52 L92.58 375.73 L100.57 368.2 Z"/>
+      </g>
+      <ellipse cx="85" cy="317.5" rx="27.8" ry="50.2" fill="none" stroke="#06060A" stroke-width="2.6"/>
+      <ellipse cx="85" cy="317.5" rx="18" ry="36" fill="none" stroke="#06060A" stroke-width="8"/>
+      <g transform="translate(85 317.5) scale(13 30)">
+        <g fill="#06060A"><path d="M0.02 -0.03 L0.33 -0.64 Q0 -0.9 -0.33 -0.64 L-0.02 -0.03 Z"/><path d="M0.03 0.01 L0.71 0.11 Q0.86 -0.28 0.51 -0.51 L0.02 -0.02 Z"/><path d="M0 0.03 L0.11 0.71 Q0.53 0.73 0.64 0.33 L0.03 0.01 Z"/><path d="M-0.03 0.01 L-0.64 0.33 Q-0.53 0.73 -0.11 0.71 L0 0.03 Z"/><path d="M-0.02 -0.02 L-0.51 -0.51 Q-0.86 -0.28 -0.71 0.11 L-0.03 0.01 Z"/></g>
+      </g>
+      <ellipse cx="85" cy="317.5" rx="3.6" ry="6.4" fill="#FFFFFF"/>
+      
+    </g>
+  </g>
+  
+  <g id="wordmark" fill="#06060A" transform="translate(150 354) scale(0.69 0.68) skewX(-13)"><path fill-rule="evenodd" transform="translate(0 0)" d="M0 -100 H92 V-74 H27 V-61 H76 V-39 H27 V-26 H92 V0 H0 Z"/><path fill-rule="evenodd" transform="translate(97 0)" d="M0 -100 H39 L54 -69 L69 -100 H106 L72 -36 V0 H44 V-36 Z"/><path fill-rule="evenodd" transform="translate(208 0)" d="M25 -100 H86 Q111 -100 111 -75 V-25 Q111 0 86 0 H25 Q0 0 0 -25 V-75 Q0 -100 25 -100 Z M29 -67 Q29 -75 37 -75 H74 Q82 -75 82 -67 V-59 H29 Z M29 -59 H56 V-37 H29 Z M29 -37 H82 V-35 Q82 -24 74 -24 H37 Q29 -24 29 -35 Z"/><path fill-rule="evenodd" transform="translate(345 0)" d="M0 -100 H92 V-74 H60 V0 H32 V-74 H0 Z"/><path fill-rule="evenodd" transform="translate(442 0)" d="M0 -100 H28 V0 H0 Z"/><path fill-rule="evenodd" transform="translate(475 0)" d="M0 -100 H72 Q111 -100 111 -75 V-58 Q111 -37 82 -32 L111 0 H72 L44 -28 V0 H0 Z M27 -76 H70 Q76 -76 76 -70 V-56 Q76 -50 70 -50 H27 Z"/><path fill-rule="evenodd" transform="translate(591 0)" d="M0 -100 H92 V-74 H27 V-61 H76 V-39 H27 V-26 H92 V0 H0 Z"/></g>
+  <g id="subline" fill="#06060A" transform="translate(245 395) scale(0.3 0.3) skewX(-13)"><path fill-rule="evenodd" transform="translate(0 0)" d="M96 -52 C104 -60 110 -70 110 -80 C110 -94 100 -100 86 -100 C72 -100 66 -92 66 -80 C66 -72 70 -66 78 -60 C64 -54 56 -44 56 -32 C56 -12 68 0 88 0 C98 0 106 -4 112 -12 L122 0 H138 L112 -46 C120 -58 124 -70 124 -80 C124 -94 112 -100 96 -100 Z M86 -84 C94 -84 96 -80 96 -74 C96 -68 92 -62 86 -56 C80 -62 76 -68 76 -74 C76 -80 78 -84 86 -84 Z M88 -40 C96 -40 100 -36 100 -28 C100 -20 96 -16 88 -16 C80 -16 76 -20 76 -28 C76 -36 80 -40 88 -40 Z"/><path fill-rule="evenodd" transform="translate(159 0)" d="M0 0 L41 -100 H83 L126 0 H99 L93 -19 H33 L27 0 Z,M39 -38 H87 L63 -77 Z"/><path fill-rule="evenodd" transform="translate(299 0)" d="M0 -100 H21 V-36 Q21 -18 42 -18 Q63 -18 63 -36 V-100 H84 V-33 Q84 0 42 0 Q0 0 0 -33 Z"/><path fill-rule="evenodd" transform="translate(433 0)" d="M0 -100 H112 V-79 H67 V0 H45 V-79 H0 Z"/><path fill-rule="evenodd" transform="translate(559 0)" d="M18 -100 H106 Q124 -100 124 -82 V-18 Q124 0 106 0 H18 Q0 0 0 -18 V-82 Q0 -100 18 -100 Z M21 -80 V-20 Q21 -17 24 -17 H100 Q103 -17 103 -20 V-80 Q103 -83 100 -83 H24 Q21 -83 21 -80 Z"/><path fill-rule="evenodd" transform="translate(724 0)" d="M20 -100 H100 Q120 -100 120 -80 V-55 H98 V-78 Q98 -83 93 -83 H27 Q22 -83 22 -78 V-22 Q22 -17 27 -17 H93 Q98 -17 98 -22 V-47 H120 V-20 Q120 0 100 0 H20 Q0 0 0 -20 V-80 Q0 -100 20 -100 Z"/><path fill-rule="evenodd" transform="translate(858 0)" d="M0 0 L41 -100 H83 L126 0 H99 L93 -19 H33 L27 0 Z,M39 -38 H87 L63 -77 Z"/><path fill-rule="evenodd" transform="translate(998 0)" d="M0 -100 H80 Q114 -100 114 -78 V-66 Q114 -46 84 -42 L114 0 H89 L63 -38 V0 H0 Z M22 -80 H76 Q82 -80 82 -76 V-68 Q82 -64 76 -64 H22 Z"/><path fill-rule="evenodd" transform="translate(1126 0)" d="M0 -100 H106 V-80 H24 V-58 H97 V-38 H24 V-20 H106 V0 H0 Z"/></g>
+  
+  <g id="speed-stripe" fill="#06060A">
+    <path d="M126 404 L617 400 L613 419 Q611.5 431 598 431 L126 404 Z"/>
+  </g>
+</svg>

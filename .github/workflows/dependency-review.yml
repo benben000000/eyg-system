@@ -1,0 +1,94 @@
+# ============================================================================
+# EYG TIRE & AUTO CARE — Dependency review
+# ============================================================================
+# Blocks a PR that introduces a known-vulnerable or badly-licensed dependency.
+#
+# Why this matters more than `npm audit` alone: `npm audit` reports what is
+# ALREADY in the lockfile. Dependency review reports what a PR is ADDING, at
+# PR time, before the lockfile is merged — which is the only moment at which
+# changing your mind is free.
+#
+# Only runs on `pull_request`. It is deliberately NOT on `pull_request_target`:
+# this action needs the dependency graph of the PR head, and running it in the
+# privileged context of the base branch with a fork's diff is exactly the
+# pattern that leaks secrets. A fork PR runs it read-only with no secrets at
+# all, which is correct and sufficient.
+#
+# ---------------------------------------------------------------------------
+# SETUP (one-time, in the repo settings — not in this file)
+#   Settings → Code security and quality → Dependency graph → Enable
+#   Settings → Actions → General → Workflow permissions → Read repository
+#     contents and packages permissions
+# The action is a no-op warning until the dependency graph is enabled.
+# ---------------------------------------------------------------------------
+# ============================================================================
+
+name: Dependency review
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+
+concurrency:
+  group: deps-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: dependency review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # The PR's dependency diff. Read-only: this job never writes a comment,
+      # it only fails. A failing check is the signal a reviewer acts on.
+      pull-requests: read
+
+    steps:
+      - name: Checkout the base commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          # Only the history needed to diff the dependency graph. Without this
+          # the action fetches the whole repo and the job takes 3x longer.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Review the dependency changes
+        uses: actions/dependency-review-action@da24556b548a50705dd671f47852072ea4c105d9 # v4.7.1 (SHA-pinned; renovate bumps it)
+        with:
+          fail-on-severity: high
+          # Deny the licenses that would put this codebase in a legally
+          # awkward position. See docs/ops/SECURITY-HEADERS.md for the full
+          # rationale. Anything GPL/AGPL in a commercial client project is a
+          # conversation to have before it merges, not after.
+          deny-licenses: >
+            GPL-3.0, AGPL-3.0, SSPL-1.0, BUSL-1.1, CC-BY-NC-4.0,
+            CC-BY-NC-SA-4.0, unlicensed, UNLICENSED
+          # A dependency nobody is actively maintaining is how the next
+          # advisory lands unpatched.
+          allow-dependencies-licenses: >-
+            mit, apache-2.0, bsd-2-clause, bsd-3-clause, isc, 0bsd, unlicense,
+            cc0-1.0, python-2.0, mpl-2.0, odbl-1.0
+          # Ignore advisories with no fix upstream — they cannot be actioned and
+          # only train the team to ignore the check. Every entry must be dated
+          # and owned. Keep in step with the ALLOWLIST in .github/workflows/ci.yml.
+          #
+          # TODO(orchestrator): run `npm audit` against the committed lockfile
+          # and add the real unfixable GHSA IDs here. Until then this is EMPTY,
+          # which means every advisory blocks the PR. That is the correct
+          # default for a project that has never shipped — a project learns to
+          # ignore a check the first time it is the only thing blocking a deploy.
+          #
+          # Format, with the date it was accepted and who accepted it:
+          #   - GHSA-xxxx-xxxx-xxxx   # accepted 2026-03-01, no upstream fix, not reachable from src/
+          ignore-vulnerabilities: ""
+          # Deps we knowingly accept even though they are outdated. A new entry
+          # needs a comment saying what the replacement plan is.
+          # allow-dependencies: >-
+          #   semver@7.5.4
+          comment-summary-in-pr: on-failure

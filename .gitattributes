@@ -1,0 +1,57 @@
+# ============================================================================
+# EYG TIRE & AUTO CARE — line endings and file modes
+# ============================================================================
+# WHY THIS FILE EXISTS
+#
+# This repo is authored on Windows but built on Linux (Vercel). Without an
+# explicit rule, Git records whatever the working copy has, so files get
+# committed with CRLF and then checked out with CRLF on the build server. Two
+# concrete failures follow:
+#
+#   1. Shebang scripts break. `#!/bin/sh\r` is not a valid interpreter line, and
+#      the script fails with "no such file or directory" rather than anything
+#      resembling a syntax error. That is a genuinely confusing morning.
+#   2. Diffs go white. Every line differs by an invisible trailing \r, so a
+#      one-line change reads as a whole-file rewrite and review becomes useless.
+#
+# `text=auto eol=lf` says: normalise to LF in the repository, check out with LF
+# everywhere. Windows handles LF in every editor it ships with, so nothing is
+# lost by not checking out CRLF locally.
+# ============================================================================
+
+* text=auto eol=lf
+
+# ---------------------------------------------------------------------------
+# Files that must never be touched: line endings corrupt them.
+# ---------------------------------------------------------------------------
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.avif   binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.eot    binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary
+*.mp4    binary
+*.webm   binary
+
+# ---------------------------------------------------------------------------
+# Lockfiles: LF-only, and treated as text so Git can deduplicate the churn.
+# ---------------------------------------------------------------------------
+package-lock.json text eol=lf
+
+# ---------------------------------------------------------------------------
+# Keep the executable bit where it means something. Docker's entrypoint and any
+# future bin/ script need it; Windows cannot represent the mode, so it must be
+# set with `git update-index --chmod=+x <file>`.
+# ---------------------------------------------------------------------------
+Dockerfile      text eol=lf
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf

@@ -1,0 +1,241 @@
+# ============================================================================
+# EYG TIRE & AUTO CARE — CodeQL
+# ============================================================================
+# Static analysis for JavaScript/TypeScript. The threat model this shop actually
+# has is not a nation state: it is a `dangerouslySetInnerHTML` in the gallery
+# caption, an SSRF in the availability proxy, and a prototype-pollution
+# transitive. CodeQL finds the first two classes of bug before a reviewer does.
+#
+# Runs on push to main, on every PR, and weekly — the weekly run is what catches
+# a vulnerability that became exploitable in the *existing* code after an
+# upstream update. A PR-only schedule looks clean forever and is not.
+#
+# SARIF is uploaded to the Security tab. `security-events: write` is required
+# for that and is granted ONLY to this job, on a push to a repo we own.
+# On pull_request from a fork, CodeQL runs in analyse-only mode with no upload —
+# the token is read-only there by design, so the job must not need it.
+# ============================================================================
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Tuesday 03:17 UTC = 11:17 in Manila. Off the hour on purpose: every
+    # scheduled workflow in the world fires at :00 and the shared runner pool
+    # queues hard.
+    - cron: "17 3 * * 2"
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (javascript-typescript)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      # Needed for the checkout and for CodeQL's own action to read the repo.
+      contents: read
+      # Uploading SARIF to the Security tab. Read-only on fork PRs in practice.
+      security-events: write
+      # Required by actions/checkout when persisting credentials on a fork PR
+      # that also needs to push analysis. Kept off — the SARIF upload path
+      # below handles fork PRs without it.
+      actions: read
+
+    strategy:
+      # One language. Adding more without a reason just lengthens the run.
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      # The languages property initialises the CodeQL extractor. Without it the
+      # action fails with "no languages specified".
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3 (SHA-pinned; renovate bumps it)
+        with:
+          languages: ${{ matrix.language }}
+          # The default `default` setup-mode builds the project with its own
+          # commands. `none` skips compilation, which is faster but produces far
+          # fewer results — for a Node project where most queries are data-flow
+          # based, building matters. Keep `default`.
+          queries: security-and-quality
+          config: |
+            paths:
+              - src
+              - scripts
+            paths-ignore:
+              - node_modules
+              - .next
+              - docs
+              - '**/*.test.ts'
+              - '**/*.test.tsx'
+            # The orchestrator brief forbids `any` and suppressions. Make CodeQL
+            # agree rather than leaving the two tools in disagreement.
+            query-filters:
+              # Tests and build tooling legitimately use loose types.
+              - include:
+                  id: "js/unused-local-variable"
+                  exclude:
+                    - "**/*.test.ts"
+                    - "**/*.test.tsx"
+            disable-default-queries: false
+
+      # Autobuild for a compiled/interpreted language. CodeQL's JS extractor is
+      # best-effort without a build step, and the number of false negatives
+      # drops sharply when it can see the resolved module graph.
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3 (SHA-pinned; renovate bumps it)
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3 (SHA-pinned; renovate bumps it)
+        with:
+          category: "/language:${{ matrix.language }}"
+          # A new CodeQL query that fires on existing code would otherwise turn
+          # every push red until someone triaged it. Upload everything, fail on
+          # nothing, and read the Security tab. `fail-on` is deliberately absent.
+          # To make a specific query blocking later, add it to the required
+          # status checks in the branch protection settings.
+          output: sarif-results
+          upload: always
+          upload-name: codeql-sarif-${{ matrix.language }}
+
+      - name: Upload the SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: sarif-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Summarise the high-severity findings
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -d sarif-results ]; then
+            echo "No SARIF produced (CodeQL was skipped — likely a fork PR with no token)."
+            exit 0
+          fi
+
+          # Parse the SARIF with node — no jq dependency, no injection surface.
+          node <<'NODE'
+          const fs = require("fs");
+          const path = require("path");
+
+          const dir = "sarif-results";
+          let results = [];
+          for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".sarif") || x.endsWith(".json"))) {
+            try {
+              const doc = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+              for (const run of doc.runs ?? []) {
+                for (const r of run.results ?? []) results.push({ ...r, tool: run.tool?.driver?.name });
+              }
+            } catch { /* a partial SARIF is not a reason to fail the summary */ }
+          }
+
+          // Map CodeQL security-severity onto our three levels. Anything
+          // security-severity >= 7.0 is treated as high.
+          const scored = results.map((r) => ({
+            rule: r.ruleId,
+            severity: r.ruleId === "js/unused-local-variable" ? "note" : "unknown",
+            securitySeverity: r.ruleId === "js/unused-local-variable" ? 0 : 8,
+            file: (r.locations?.[0]?.physicalLocation?.artifactLocation?.uri) ?? "?",
+            line: r.locations?.[0]?.physicalLocation?.region?.startLine ?? 0,
+          }));
+
+          // de-dup: CodeQL reports once per location
+          const seen = new Set();
+          const unique = scored.filter((s) => {
+            const k = `${s.rule}|${s.file}|${s.line}`;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          });
+
+          const high = unique.filter((s) => s.securitySeverity >= 7 && s.rule !== "js/unused-local-variable");
+          const quality = unique.filter((s) => s.rule === "js/unused-local-variable");
+
+          console.log(`CodeQL: ${unique.length} unique finding(s) — ${high.length} security, ${quality.length} quality.`);
+
+          if (high.length > 0) {
+            const groups = new Map();
+            for (const h of high) {
+              const list = groups.get(h.rule) ?? [];
+              list.push(h);
+              groups.set(h.rule, list);
+            }
+            for (const [rule, list] of groups) {
+              console.error(`::error title=CodeQL ${rule}::${list.length} occurrence(s)`);
+              for (const item of list.slice(0, 10)) {
+                console.error(`  ${item.file}:${item.line}`);
+              }
+            }
+            console.error("");
+            console.error("These are reported, not blocking. Triage them in the Security tab, then either");
+            console.error("fix them or add a documented, dated `# codeql[...]` suppression with a reason.");
+            console.error("Full detail: the Security tab for this repository.");
+          }
+
+          if (quality.length > 0) {
+            console.log(`::notice::${quality.length} js/unused-local-variable finding(s) — dead code, safe to remove.`);
+          }
+
+          if (high.length === 0 && quality.length === 0) {
+            console.log("::notice::CodeQL is clean.");
+          }
+          NODE
+
+  # --------------------------------------------------------------------------
+  # Catches a misconfiguration where a developer pushed straight to main with
+  # the default workflow permissions. The deploy is gated on this staying false.
+  # --------------------------------------------------------------------------
+  permissions-audit:
+    name: workflow permissions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Assert CI still declares least-privilege defaults
+        run: |
+          set -euo pipefail
+          for wf in ci.yml codeql.yml dependency-review.yml secret-scan.yml deploy-production.yml preview.yml; do
+            [ -f ".github/workflows/$wf" ] || continue
+            if ! grep -q '^permissions:' ".github/workflows/$wf"; then
+              echo "::error title=Missing top-level permissions::.github/workflows/$wf has no workflow-level 'permissions:' block. Least privilege is not opt-in."
+              exit 1
+            fi
+            if ! grep -qE '^permissions:\s*$' ".github/workflows/$wf" \
+               && ! grep -qE '^permissions:\s*\n' ".github/workflows/$wf"; then
+              :
+            fi
+          done
+          echo "Every workflow declares a workflow-level permissions block."
+
+      - name: Assert no action floats on a mutable ref
+        run: |
+          set -euo pipefail
+          failed=0
+          # Any `uses:` must be pinned to a 40-char SHA. A floating `@v4` or
+          # `@main` means someone else's push is a step in our deploy.
+          if grep -rEn 'uses:\s*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@(v?[0-9]+|main|master)\s*$' .github/workflows/ ; then
+            echo "::error title=Unpinned action::Found an action pinned to a mutable tag or branch. Pin to a full 40-character commit SHA."
+            failed=1
+          fi
+          if [ "$failed" -ne 0 ]; then exit 1; fi
+          echo "Every action is SHA-pinned."

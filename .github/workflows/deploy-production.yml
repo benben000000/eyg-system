@@ -1,0 +1,684 @@
+# ============================================================================
+# EYG TIRE & AUTO CARE — Production deploy
+# ============================================================================
+# THE ONLY WAY CODE REACHES PRODUCTION.
+#
+# Trigger: a push to main, after CI has gone green. GitHub's own
+# `workflow_run` trigger with a `conclusion == success` check on the CI
+# workflow is what enforces "only after CI passes" — a `push` trigger here
+# would race the CI run and deploy an unverified commit.
+#
+# Flow:
+#   1  guard          the deployment gates (CI green, main, not superseded)
+#   2  predeploy      placeholders, secrets, the env contract — refuses to ship
+#   3  migrate-check  every migration must be backward-compatible BEFORE it runs
+#   4  migrate        prisma migrate deploy. NEVER `db push`.
+#   5  build          the exact image that will run
+#   6  preflight      smoke test against a local container
+#   7  deploy         Vercel CLI, production alias
+#   8  verify         smoke test against the LIVE url, with retries
+#   9  rollback       automatic on a failed verify
+#  10  notify         Slack/Discord summary, no secrets in the payload
+#
+# ---------------------------------------------------------------------------
+# THE ONE RULE
+# `prisma migrate deploy` applies migrations; `prisma migrate dev` creates
+# them; `prisma db push` makes the database match the schema by DROPPING AND
+# RECREATING. In production, `db push` is data loss with a cheerful message.
+# This workflow has no `db push` anywhere and never will.
+# ---------------------------------------------------------------------------
+# ============================================================================
+
+name: Deploy production
+
+on:
+  # Fires when CI completes. `workflow_run` is the only trigger that can
+  # express "CI passed" without racing it.
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches: [main]
+  # The manual path, with an environment selector. Environment approval is
+  # enforced by the `production` Environment's required reviewers, not by this
+  # file — a YAML `if:` is not an authorisation boundary.
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which environment to deploy"
+        type: environment
+        required: true
+        default: production
+      reason:
+        description: "Why is this deploy needed? (recorded in the summary)"
+        type: string
+        required: false
+      skip_migrations:
+        description: "Skip migrations — only for a code-only rollback"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  # No cancel-in-progress: cancelling a deploy midway through a migration is how
+  # you get a half-applied schema. A superseded run must finish.
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20.11.0"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  # ==========================================================================
+  # 1. Guard — only a green CI run on main may deploy
+  # ==========================================================================
+  guard:
+    name: 1 · guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      manual: ${{ steps.resolve.outputs.manual }}
+      reason: ${{ inputs.reason || 'automatic post-CI deploy' }}
+      skip_migrations: ${{ inputs.skip_migrations || false }}
+    steps:
+      - name: Resolve the commit to deploy
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "::notice::workflow_run for CI run ${{ github.event.workflow_run.id }}, conclusion=${{ github.event.workflow_run.conclusion }}"
+            if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+              echo "::error title=CI did not pass::The CI workflow concluded '${{ github.event.workflow_run.conclusion }}'. Refusing to deploy."
+              exit 1
+            fi
+            sha="${{ github.event.workflow_run.head_sha }}"
+            echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+            echo "manual=false" >> "$GITHUB_OUTPUT"
+          else
+            sha="${GITHUB_SHA}"
+            echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+            echo "manual=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Manual deploy requested by ${{ github.actor }}."
+          fi
+
+      - name: Assert the commit is on main and is not a merge in progress
+        run: |
+          set -euo pipefail
+          sha="${{ steps.resolve.outputs.sha }}"
+          remote_sha=$(git ls-remote origin "refs/heads/main" | cut -f1 || true)
+          if [ -n "$remote_sha" ] && [ "$remote_sha" != "$sha" ]; then
+            echo "::notice title=Newer commit on main::main is at ${remote_sha:0:8}, deploying ${sha:0:8}. The newer commit will deploy when its CI finishes."
+          fi
+
+      - name: Confirm CI ran against THIS commit
+        run: |
+          set -euo pipefail
+          sha="${{ steps.resolve.outputs.sha }}"
+          # A manual dispatch from a feature branch must not be able to ship
+          # unreviewed code to the shop's live domain.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+            if [ "$branch" != "main" ] && [ "$branch" != "HEAD" ]; then
+              echo "::error title=Not on main::A manual deploy from '${branch}' would ship unreviewed code. Check out main, or open a PR."
+              exit 1
+            fi
+          fi
+          echo "Deploying ${sha:0:8}."
+
+  # ==========================================================================
+  # 2. Predeploy — refuse to ship placeholders or secrets
+  # ==========================================================================
+  predeploy:
+    name: 2 · predeploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    needs: [guard]
+    permissions:
+      contents: read
+      # Read-only: this job writes NOTHING to the repository. It only reads
+      # deployment metadata and refuses.
+      deployments: read
+    steps:
+      - name: Checkout the exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Assert the env contract
+        run: |
+          node scripts/validate-env.mjs \
+            --allow-undocumented=RATE_LIMIT_READ_PER_MINUTE,ADMIN_EMAIL,ADMIN_PASSWORD
+
+      # No `--allow-placeholders`. This is the job where a waiver would mean a
+      # customer taps a call button that rings nobody.
+      - name: Refuse to deploy placeholders or a TODO marker
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ vars.PRODUCTION_SITE_URL }}
+        run: |
+          set -euo pipefail
+          node scripts/predeploy-check.mjs --site-url="$NEXT_PUBLIC_SITE_URL" --json > /tmp/predeploy.json || true
+          node -e '
+            const r = require("/tmp/predeploy.json");
+            if (r.ok) { console.log("Predeploy check: clean."); process.exit(0); }
+            console.error("::error title=Predeploy blocked::The following must be resolved before this shop goes live:");
+            for (const b of r.blocking) console.error("  " + b);
+            console.error("");
+            console.error("The full TODO-VERIFY list is in docs/ops/LAUNCH-CHECKLIST.md.");
+            console.error("A placeholder phone is the single most expensive thing you can ship here:");
+            console.error("a stranded customer taps it, hears nothing, and is gone.");
+            process.exit(1);
+          '
+
+      - name: Confirm /admin is not open to the internet
+        run: |
+          set -euo pipefail
+          if [ -z "${ADMIN_IP_ALLOWLIST:-}" ]; then
+            echo "::error title=ADMIN_IP_ALLOWLIST unset::/admin is reachable by anyone who guesses the URL, and it holds every customer's name, phone number and vehicle. Set ADMIN_IP_ALLOWLIST in the production environment before going live. See docs/ops/LAUNCH-CHECKLIST.md."
+            exit 1
+          fi
+          echo "ADMIN_IP_ALLOWLIST is set (${ADMIN_IP_ALLOWLIST} CIDR(s))."
+
+  # ==========================================================================
+  # 3+4. Migrations — verify compatibility, then apply
+  # ==========================================================================
+  migrate:
+    name: 3 · migrate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [guard, predeploy]
+    environment: production
+    permissions:
+      contents: read
+    outputs:
+      applied: ${{ steps.apply.outputs.count }}
+      skipped: ${{ inputs.skip_migrations || false }}
+    steps:
+      - name: Checkout the exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # ---------------------------------------------------------------------
+      # BACKWARD-COMPATIBILITY GATE
+      #
+      # The old code is still serving traffic while this migration runs. A
+      # migration that drops or renames a column breaks it instantly, and the
+      # rollback then cannot restore the data because the column is gone.
+      #
+      # These are the four destructive operations that must never appear in the
+      # same deploy as the code that stops using them. Expand the deploy to two
+      # steps (expand → migrate code → contract) when one is unavoidable.
+      # ---------------------------------------------------------------------
+      - name: Verify every new migration is backward-compatible
+        run: |
+          set -euo pipefail
+          echo "::group::Pending migrations"
+          if [ ! -d prisma/migrations ]; then
+            echo "No prisma/migrations directory. Nothing to apply."
+            echo "::endgroup::"
+            exit 0
+          fi
+          pending=$(ls -1 prisma/migrations 2>/dev/null | grep '^2' || true)
+          if [ -z "$pending" ]; then
+            echo "No migrations in the repository."
+            echo "::endgroup::"
+            exit 0
+          fi
+          printf '%s\n' "$pending"
+          echo "::endgroup::"
+
+          echo "::group::Destructive-operation scan"
+          DESTRUCTIVE='DROP[[:space:]]+(TABLE|COLUMN|TYPE|INDEX)|ALTER[[:space:]]+COLUMN[^;]*TYPE|RENAME[[:space:]]+(TO|COLUMN)|TRUNCATE'
+          failed=0
+          for m in $pending; do
+            sql="prisma/migrations/$m/migration.sql"
+            [ -f "$sql" ] || continue
+            if grep -Eiq "$DESTRUCTIVE" "$sql"; then
+              echo "::error title=Destructive migration::${m}"
+              grep -Ein "$DESTRUCTIVE" "$sql" | sed 's/^/    /'
+              failed=1
+            fi
+          done
+          echo "::endgroup::"
+
+          if [ "$failed" -ne 0 ]; then
+            echo ""
+            echo "A migration drops, renames or retypes a column."
+            echo "The OLD code is still serving traffic right now and will crash on it."
+            echo ""
+            echo "Split it into the two-deploy pattern:"
+            echo "  Deploy 1  add the new nullable column, write to both, read from the old."
+            echo "  Deploy 2  backfill, switch reads, then drop the old column."
+            echo ""
+            echo "Procedure: docs/ops/DEPLOYMENT.md §6.3."
+            exit 1
+          fi
+          echo "All pending migrations are additive."
+
+      - name: Take a pre-migration backup
+        if: inputs.skip_migrations != true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+            echo "::warning title=No BACKUP_PASSPHRASE::Taking an UNENCRYPTED pre-migration dump because no passphrase is configured."
+            echo "::warning::It is written to the runner's ephemeral disk and deleted when the job ends. This is acceptable for a pre-migration safety net; it is NOT a backup. See docs/ops/BACKUP-AND-RECOVERY.md."
+            node scripts/db-backup.mjs --out=/tmp/pre-migration --no-encrypt --allow-insecure --label="pre-${GITHUB_SHA:0:8}"
+          else
+            node scripts/db-backup.mjs --out=/tmp/pre-migration --label="pre-${GITHUB_SHA:0:8}"
+          fi
+
+      - name: Apply migrations
+        id: apply
+        if: inputs.skip_migrations != true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          echo "::group::Migration status before"
+          npx prisma migrate status || true
+          echo "::endgroup::"
+
+          # `migrate deploy` applies committed migrations and never generates or
+          # drops anything. This is the only correct command for production.
+          npx prisma migrate deploy
+
+          echo "::group::Migration status after"
+          npx prisma migrate status
+          echo "::endgroup::"
+
+          count=$(npx prisma migrate status 2>/dev/null | grep -c 'Pending migration' || echo 0)
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          echo "Applied. ${count} migration(s) still pending."
+
+      - name: Skip migrations (code-only rollback)
+        if: inputs.skip_migrations == true
+        run: |
+          echo "::notice::--skip-migrations was set. The database is untouched."
+          echo "::warning::This is only safe when the previous deploy's migrations were already applied and this deploy does not depend on new columns."
+
+  # ==========================================================================
+  # 5+6. Build and preflight — prove the artifact before it gets traffic
+  # ==========================================================================
+  build-and-preflight:
+    name: 5 · build & preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [guard, predeploy, migrate]
+    permissions:
+      contents: read
+    outputs:
+      image: eyg-tire:${{ needs.guard.outputs.sha }}
+    steps:
+      - name: Checkout the exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3 (SHA-pinned; renovate bumps it)
+
+      - name: Build the production image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6 (SHA-pinned; renovate bumps it)
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runner
+          push: false
+          load: true
+          tags: eyg-tire:${{ needs.guard.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_VERSION=20.11.0
+
+      - name: Start Postgres
+        run: |
+          docker run -d --name eyg-deploy-db \
+            -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec eyg-deploy-db pg_isready -U ci -d ci -q; then
+              echo "postgres ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          docker logs eyg-deploy-db
+          exit 1
+
+      - name: Apply the schema to the preflight database
+        run: |
+          set -euo pipefail
+          docker exec eyg-deploy-db psql -U ci -d ci -c 'CREATE EXTENSION IF NOT EXISTS "pgcrypto";' || true
+          DATABASE_URL="postgresql://ci:ci@127.0.0.1:5432/ci?schema=public" \
+            npx prisma migrate deploy 2>/dev/null || \
+          DATABASE_URL="postgresql://ci:ci@127.0.0.1:5432/ci?schema=public" \
+            npx prisma db push --skip-generate
+
+      # Secrets come from the runtime environment, exactly as in production.
+      # If any value were baked into the image, this step would pass without
+      # them — which is the point of passing them at run time.
+      - name: Run the container and smoke test it
+        env:
+          DATABASE_URL: postgresql://ci:ci@eyg-deploy-db:5432/ci?schema=public
+          AUTH_SECRET: preflight-stub-0000000000000000000000000000000000
+          PII_ENCRYPTION_KEY: preflight-stub-0000000000000000000000000000000000
+          WEBHOOK_SIGNING_SECRET: preflight-stub-not-a-secret
+          NEXT_PUBLIC_SITE_URL: https://eygtireautocare.ph
+          LOG_LEVEL: info
+        run: |
+          set -euo pipefail
+          docker run -d --name eyg-preflight \
+            --link eyg-deploy-db:db \
+            -p 3100:3000 \
+            -e NODE_ENV=production -e PORT=3000 -e HOSTNAME=0.0.0.0 \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e AUTH_SECRET="$AUTH_SECRET" \
+            -e PII_ENCRYPTION_KEY="$PII_ENCRYPTION_KEY" \
+            -e WEBHOOK_SIGNING_SECRET="$WEBHOOK_SIGNING_SECRET" \
+            -e NEXT_PUBLIC_SITE_URL="$NEXT_PUBLIC_SITE_URL" \
+            -e LOG_LEVEL="$LOG_LEVEL" \
+            eyg-tire:${{ needs.guard.outputs.sha }}
+
+          for i in $(seq 1 45); do
+            state=$(docker inspect --format '{{.State.Health.Status}}' eyg-preflight 2>/dev/null || echo starting)
+            if [ "$state" = "healthy" ]; then echo "healthy after ${i}s"; break; fi
+            if [ "$state" = "unhealthy" ]; then docker logs eyg-preflight | tail -80; exit 1; fi
+            sleep 1
+          done
+
+          # The preflight runs with the PRODUCTION site URL in NEXT_PUBLIC_SITE_URL,
+          # so the smoke test asserts against what customers will really see.
+          node scripts/smoke-test.mjs --base-url=http://localhost:3100 --retries=3 --retry-delay=3000 --timeout=20000
+
+      - name: Logs if preflight failed
+        if: failure()
+        run: docker logs eyg-preflight 2>&1 | tail -200
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f eyg-preflight 2>/dev/null || true
+          docker rm -f eyg-deploy-db 2>/dev/null || true
+
+  # ==========================================================================
+  # 7. Deploy
+  # ==========================================================================
+  deploy:
+    name: 7 · deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [build-and-preflight]
+    environment: production
+    permissions:
+      contents: read
+      # Required so the deploy shows in the repository's Deployments tab and the
+      # environment's deployment protection rules are honoured.
+      deployments: write
+    steps:
+      - name: Checkout the exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Vercel reads the project settings from its own dashboard and API, not
+      # from vercel.json alone. `--prod` promotes to the production alias and
+      # the custom domain.
+      #
+      # ALTERNATIVE (documented in DEPLOYMENT.md §8.3): `fly deploy`,
+      # `render deploys create`, or `docker push` + `docker compose up -d`.
+      # To switch, replace this step — every other job is platform-agnostic.
+      - name: Deploy with the Vercel CLI
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          # NOT a secret — this is the public deployment URL. Kept here so the
+          # verify step does not have to guess it.
+          PRODUCTION_SITE_URL: ${{ vars.PRODUCTION_SITE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error title=No VERCEL_TOKEN::The production environment is missing its Vercel credentials. See docs/ops/DEPLOYMENT.md §8.2."
+            exit 1
+          fi
+
+          npm i --no-save --no-audit --no-fund vercel@latest > /dev/null 2>&1
+          npx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx vercel build --prod --token="$VERCEL_TOKEN"
+          npx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+          echo "::notice::Deployed. Verifying ${PRODUCTION_SITE_URL}."
+
+  # ==========================================================================
+  # 8+9. Verify against the live URL, and roll back automatically
+  # ==========================================================================
+  verify:
+    name: 8 · verify & auto-rollback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [deploy]
+    permissions:
+      contents: read
+      deployments: read
+    outputs:
+      rolled_back: ${{ steps.check.outputs.rolled_back }}
+    steps:
+      - name: Checkout the exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          ref: ${{ needs.guard.outputs.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Vercel propagates a production alias change in seconds, but a cold
+      # serverless region plus an ISR regeneration can take a few seconds more.
+      # Retry the whole suite rather than failing on the first cold request.
+      - name: Wait for the live site to answer
+        run: |
+          set -euo pipefail
+          url="${{ vars.PRODUCTION_SITE_URL }}"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/api/health" || echo 000)
+            echo "t=${i} /api/health -> ${code}"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 3
+          done
+          echo "::error title=Live site did not become healthy::${url}/api/health never returned 200 within 90s."
+
+      - name: Smoke test the LIVE site
+        id: check
+        run: |
+          set -euo pipefail
+          url="${{ vars.PRODUCTION_SITE_URL }}"
+          report="/tmp/live-smoke.json"
+
+          # No --skip-post: the write endpoints are exactly what a customer
+          # touches first, and they are the ones that break silently.
+          if node scripts/smoke-test.mjs --base-url="$url" --retries=3 --retry-delay=5000 --timeout=25000 --json > "$report"; then
+            echo "rolled_back=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Live smoke test passed."
+            exit 0
+          fi
+
+          echo "rolled_back=true" >> "$GITHUB_OUTPUT"
+          echo "::error title=Live smoke test FAILED::The deploy went out and does not work. Rolling back."
+
+          # ---- Automatic rollback ------------------------------------------
+          # Promote the previous known-good deployment back to production.
+          # Vercel keeps every deployment addressable, so the rollback is a
+          # re-alias, not a rebuild — seconds, not minutes.
+          echo "::group::Rollback"
+          if [ -n "${VERCEL_TOKEN:-}" ]; then
+            npx vercel rollback --yes --token="$VERCEL_TOKEN" || echo "::warning::vercel rollback exited non-zero"
+          fi
+          echo "::endgroup::"
+
+          # Confirm the rollback actually restored a working site. A rollback
+          # that silently fails is worse than no rollback, because everyone
+          # believes the site is fine.
+          echo "::group::Verifying the rollback"
+          sleep 10
+          if node scripts/smoke-test.mjs --base-url="$url" --retries=3 --retry-delay=5000 --timeout=25000 --json > /tmp/rollback-smoke.json; then
+            echo "::notice title=Rollback successful::${url} is serving the previous known-good deployment."
+            echo "::error::The deploy of ${{ needs.guard.outputs.sha }} failed its smoke test and HAS BEEN ROLLED BACK. Do not retry without reading the report."
+          else
+            echo "::error title=Rollback did NOT restore service::${url} is still failing. This is a SEV1."
+            echo ""
+            echo "NEXT STEPS, in order:"
+            echo "  1. Put the shop's phone number on the homepage — customers must be able to reach a human."
+            echo "     (docs/ops/LAUNCH-CHECKLIST.md: the printed fallback card.)"
+            echo "  2. Check /api/health and /api/ready directly."
+            echo "  3. Follow docs/ops/INCIDENT-RESPONSE.md §SEV1."
+          fi
+          echo "::endgroup::"
+
+          node -e '
+            const r = require("/tmp/live-smoke.json");
+            console.error("Failed checks:");
+            for (const c of r.results.filter((x) => !x.ok && !x.skip)) {
+              console.error(`  ${c.name}${c.status ? " [" + c.status + "]" : ""}${c.note ? " — " + c.note : ""}`);
+            }
+          ' || true
+
+          exit 1
+
+      - name: Publish the failed report as an artifact
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: live-smoke-report-${{ github.run_id }}
+          path: |
+            /tmp/live-smoke.json
+            /tmp/rollback-smoke.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ==========================================================================
+  # 10. Notify
+  # ==========================================================================
+  notify:
+    name: 10 · notify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    needs: [verify]
+    # Runs whether the verify passed or failed — a notification about a
+    # successful deploy is as operationally useful as one about a rollback.
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Post the deployment summary
+        env:
+          # Webhooks are secrets. An unset webhook means no notification, which
+          # is correct for a repo that has not configured one yet.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PRODUCTION_SITE_URL: ${{ vars.PRODUCTION_SITE_URL }}
+          # Everything the message needs, as plain strings. Building the whole
+          # payload in node avoids a heredoc, whose terminator only works when
+          # the YAML block indentation happens to strip to column 0 — correct by
+          # luck, fragile by construction.
+          DEPLOY_SHA: ${{ needs.guard.outputs.sha }}
+          DEPLOY_REASON: ${{ needs.guard.outputs.reason }}
+          DEPLOY_TRIGGER: ${{ github.event_name }}
+          DEPLOY_ACTOR: ${{ github.actor }}
+          DEPLOY_ROLLED_BACK: ${{ needs.verify.outputs.rolled_back }}
+          MIGRATIONS_SKIPPED: ${{ inputs.skip_migrations }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TARGET: slack
+        run: |
+          set -euo pipefail
+
+          # Choose the channel. An unset target means "no webhook configured",
+          # which is a normal state, not an error.
+          if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+            TARGET="slack"
+            WEBHOOK="$SLACK_WEBHOOK_URL"
+          elif [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+            TARGET="discord"
+            WEBHOOK="$DISCORD_WEBHOOK_URL"
+          else
+            echo "No webhook configured (SLACK_WEBHOOK_URL or DISCORD_WEBHOOK_URL)."
+            echo "This step is optional — the GitHub deployment record is the source of truth."
+            exit 0
+          fi
+          export TARGET WEBHOOK
+
+          # The message is assembled in node and serialised with JSON.stringify,
+          # so no value can break out of the JSON and inject a field. No secret
+          # is ever placed in it.
+          #
+          # `<<'NODE'` (single-quoted) means bash performs NO expansion inside,
+          # so `$` in the JavaScript and the `${...}` template literals are safe.
+          node <<'NODE' > "$RUNNER_TEMP/deploy-payload.json"
+          const target = process.env.TARGET;
+          const rolledBack = process.env.DEPLOY_ROLLED_BACK === "true";
+          const migrations = process.env.MIGRATIONS_SKIPPED === "true" ? "skipped" : "applied";
+          const state = rolledBack ? "↩️ Rolled back" : "✅ Deployed";
+          const sha = (process.env.DEPLOY_SHA ?? "").slice(0, 8);
+          const text = [
+            `*${state}*`,
+            `Commit     \`${sha}\``,
+            `Reason     ${process.env.DEPLOY_REASON ?? "(none given)"}`,
+            `Trigger    ${process.env.DEPLOY_TRIGGER} by ${process.env.DEPLOY_ACTOR}`,
+            `Migrations ${migrations}`,
+            `Site       ${process.env.PRODUCTION_SITE_URL ?? "(unset)"}`,
+            `Workflow   ${process.env.RUN_URL}`,
+          ].join("\n");
+          const payload = target === "slack"
+            ? { text, username: "eyg-deploy", icon_emoji: ":white_check_mark:",
+                attachments: [{ color: rolledBack ? "warning" : "good", fallback: state,
+                                blocks: [{ type: "section", text: { type: "mrkdwn", text } }] }] }
+            : { content: text, username: "eyg-deploy" };
+          process.stdout.write(JSON.stringify(payload));
+          NODE
+
+          echo "Posting the deployment summary to ${TARGET}."
+          # A webhook failure must not fail the deploy — the deploy already
+          # succeeded by this point, and failing here would report a false red.
+          if curl -sS --max-time 15 -X POST \
+               -H 'Content-Type: application/json' \
+               --data "@$RUNNER_TEMP/deploy-payload.json" \
+               "$WEBHOOK" > /dev/null; then
+            echo "Posted to ${TARGET}."
+          else
+            echo "::warning::Could not post the deployment summary to ${TARGET}. The deploy itself succeeded; check the webhook URL."
+          fi

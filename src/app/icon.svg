@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="EYG Tire and Auto Care">
+  <title>EYG Tire &amp; Auto Care</title>
+  <rect width="100" height="100" rx="18" fill="#06060A"/>
+  <circle cx="50" cy="50" r="33" fill="none" stroke="#FCC605" stroke-width="11"/>
+  <polygon transform="translate(50 50)" points="11.46 -15.78 5.4 -23.38 -5.4 -23.38 -11.46 -15.78 18.55 6.03 23.91 -2.09 20.57 -12.36 11.46 -15.78 0 19.5 9.38 22.09 18.11 15.75 18.55 6.03 -18.55 6.03 -18.11 15.75 -9.38 22.09 0 19.5 -11.46 -15.78 -20.57 -12.36 -23.91 -2.09 -18.55 6.03" fill="#FCC605"/>
+  <circle cx="50" cy="50" r="4.4" fill="#06060A"/>
+</svg>

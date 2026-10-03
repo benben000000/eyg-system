@@ -1,0 +1,94 @@
+# ============================================================================
+# EYG Tire & Auto Care — Docker build context exclusions
+# Keep the context small and, more importantly, make it *impossible* to bake a
+# secret or the raw brand research into an image layer. Docker treats any file
+# listed here as "does not exist" for both `COPY` and `ADD`.
+# ============================================================================
+
+# ---------- Version control ----------
+.git
+.gitignore
+.gitattributes
+.github/
+.hg
+.svn
+
+# ---------- Dependencies & build output (rebuilt inside the image) ----------
+node_modules
+.next
+out
+.turbo
+.vercel
+.cache
+*.tsbuildinfo
+next-env.d.ts
+
+# ---------- Secrets: NEVER ship into a layer ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.sentryclirc
+.sshtunnel/
+
+# ---------- Brand research: raw assets, briefs and large binaries ----------
+# `brand/` holds the raw logo/profile imagery and research notes. The *derived*
+# web assets already live in `public/` and are all the image needs.
+brand/
+docs/research/
+docs/brand/
+content/
+*.jpg
+*.jpeg
+*.tiff
+*.tif
+*.psd
+*.ai
+*.sketch
+
+# ---------- Tests, CI and QA ----------
+tests/
+test-results/
+playwright-report/
+blob-report/
+coverage/
+.nyc_output/
+.lighthouseci/
+vitest.config.ts
+playwright.config.ts
+*.lcov
+junit*.xml
+
+# ---------- Docs (not needed at runtime; saves ~1 MB) ----------
+docs/
+*.md
+!README.md
+
+# ---------- Ops artefacts & backups ----------
+backups/
+restore-dry-run/
+*.dump
+*.dump.enc
+*.sql
+*.sql.gz
+*.log
+logs/
+
+# ---------- Tooling / editor / OS ----------
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.eslintcache
+.mcp.json
+
+# ---------- Generated OG images are committed on purpose ----------
+# `public/og/*.png` IS needed by the runtime (referenced by src/lib/seo.ts).
+# It is built inside the builder stage from scripts/generate-og.mjs when absent.

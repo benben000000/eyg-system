@@ -1,0 +1,94 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "npm ci",
+  "buildCommand": "prisma generate && node scripts/generate-og.mjs && next build",
+  "outputDirectory": ".next",
+  "cleanUrls": false,
+  "trailingSlash": false,
+
+  "regions": ["sin1"],
+
+  "functions": {
+    "src/app/api/health/route.ts": {
+      "maxDuration": 5,
+      "memory": 512
+    },
+    "src/app/api/ready/route.ts": {
+      "maxDuration": 5,
+      "memory": 512
+    },
+    "src/app/api/availability/route.ts": {
+      "maxDuration": 10,
+      "memory": 1024
+    },
+    "src/app/api/quote/route.ts": {
+      "maxDuration": 10,
+      "memory": 1024
+    },
+    "src/app/api/booking/route.ts": {
+      "maxDuration": 15,
+      "memory": 1024
+    },
+    "src/app/api/cron/*.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "src/app/api/cron/tick/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+
+  "crons": [
+    {
+      "path": "/api/cron/tick",
+      "schedule": "*/10 * * * *"
+    }
+  ],
+
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-DNS-Prefetch-Control", "value": "on" },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "X-XSS-Protection", "value": "0" },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(self), payment=(self), usb=(), interest-cohort=()"
+        },
+        { "key": "X-Download-Options", "value": "noopen" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+      ]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/og/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, stale-while-revalidate=86400"
+        }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+      ]
+    }
+  ]
+}

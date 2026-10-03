@@ -1,0 +1,193 @@
+# ============================================================================
+# EYG Tire & Auto Care — Render blueprint
+# ============================================================================
+# NOT THE DEFAULT. Vercel is (docs/ops/DEPLOYMENT.md §8).
+#
+# Use Render when you want a managed Postgres with actual automated backups
+# AND a plain Docker deploy, without operating the database yourself. Render's
+# free Postgres expires after 30 days, so the paid tier is the only real option
+# for this shop.
+#
+# REALISTIC COST (see docs/ops/COST-OPTIMISATION.md §3):
+#   Web service (starter, 512 MB)   USD 7   /month
+#   Postgres (starter, 1 GB)        USD 7   /month
+#   ------------------------------------------------------------
+#   Total                            USD 14  /month
+#
+# On Vercel Hobby the same architecture is USD 0 because the database is a free
+# tier that happens to be enough. Prefer Vercel unless you specifically need
+# co-located Postgres or long-running crons.
+#
+# ---------------------------------------------------------------------------
+# DEPLOY
+#   1. Push this repo to GitHub.
+#   2. Render dashboard → New → Blueprint → pick this repo. It reads this file.
+#   3. Fill in every value marked `sync: false` — Render will not deploy
+#      without them, which is correct.
+#   4. render.yaml creates the database AND the web service. The web service
+#      waits for the database to finish provisioning via `fromDatabase`.
+#
+# IMPORTANT: this file contains a `databases:` block. Render will create a
+# GENERATED Postgres instance. For a real shop, use a managed provider you
+# control the backups for (Neon, Supabase, RDS) and set `DATABASE_URL` as a
+# `sync: false` secret instead, then delete the `databases:` block. See
+# docs/ops/BACKUP-AND-RECOVERY.md §2.
+# ============================================================================
+
+services:
+  - type: web
+    name: eyg-tire-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    branch: main
+    autoDeploy: false
+    healthCheckPath: /api/health
+    # The Dockerfile's own HEALTHCHECK is not used by Render; Render needs the
+    # path and will poll it on its own schedule. /api/ready is the deeper check
+    # and is what the post-deploy smoke test asserts against.
+    numInstances: 1
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: PORT
+        value: "10000"
+      - key: HOSTNAME
+        value: 0.0.0.0
+      - key: LOG_LEVEL
+        value: info
+
+      # ---- required, no default: Render refuses to boot without these ----
+      - key: AUTH_SECRET
+        sync: false
+      - key: PII_ENCRYPTION_KEY
+        sync: false
+      - key: WEBHOOK_SIGNING_SECRET
+        sync: false
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eyg-tire-db
+          property: connectionString
+
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_VERSION
+        value: 1.0.0
+      - key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_GA_MEASUREMENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_PLAUSIBLE_DOMAIN
+        sync: false
+      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+        sync: false
+
+      # ---- rate limiting: Postgres fallback unless Upstash is configured ----
+      - key: RATE_LIMIT_PUBLIC_PER_MINUTE
+        value: "10"
+      - key: RATE_LIMIT_BOOKING_PER_HOUR
+        value: "8"
+      - key: RATE_LIMIT_QUOTE_PER_HOUR
+        value: "12"
+      - key: RATE_LIMIT_LOGIN_PER_15MIN
+        value: "8"
+      - key: RATE_LIMIT_READ_PER_MINUTE
+        value: "240"
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+
+      # ---- bot protection ----
+      - key: CAPTCHA_ENABLED
+        value: "true"
+      - key: CAPTCHA_TTL_SECONDS
+        value: "600"
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+
+      # ---- transactional email: Resend OR SMTP, never both ----
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_SECURE
+        value: "false"
+
+      # ---- SMS: optional, notifications log as "skipped" without it ----
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+
+      # ---- WhatsApp: optional, wa.me links work without it ----
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+
+      # ---- reviews: social proof is empty until a key is set ----
+      - key: GOOGLE_PLACE_ID
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: FACEBOOK_PAGE_ACCESS_TOKEN
+        sync: false
+
+      # ---- observability ----
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_AUTH_TOKEN
+        sync: false
+      - key: SENTRY_ORG
+        sync: false
+      - key: SENTRY_PROJECT
+        sync: false
+
+      # ---- admin security ----
+      # Set this BEFORE going live. Empty = /admin is reachable by anyone.
+      # See docs/ops/SECURITY-HEADERS.md and LAUNCH-CHECKLIST.md.
+      - key: ADMIN_IP_ALLOWLIST
+        sync: false
+
+# ---------------------------------------------------------------------------
+# Render does NOT run cron jobs. The five /api/cron/* handlers in vercel.json
+# have no scheduler here. Options, in order of preference:
+#   1. Deploy to Vercel (cron works out of the box).
+#   2. Use an external scheduler (cron-job.org, GitHub Actions on a schedule)
+#      that GETs /api/cron/<job> with the shared cron secret.
+#   3. Add a Render cron service of type `cron` pointing at a small worker.
+#
+# Option 2 is the documented default. See docs/ops/RUNBOOK.md §9.
+# ---------------------------------------------------------------------------
+
+databases:
+  - name: eyg-tire-db
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "16"
+    ipAllowList: []
+    # Render's automatic backups: daily, 7-day retention, 30-day point-in-time
+    # on the paid tier. This is better than nothing and NOT a substitute for the
+    # tested restore drill in docs/ops/BACKUP-AND-RECOVERY.md §6.
+    backup:
+      plan: daily
+      retentionDays: 7

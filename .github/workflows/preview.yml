@@ -1,0 +1,360 @@
+# ============================================================================
+# EYG TIRE & AUTO CARE — Preview deployments
+# ============================================================================
+# Every PR gets a real, clickable URL. This is the single highest-value thing
+# this workflow does: a designer or the shop owner can open a phone-sized link
+# and see the change without installing anything.
+#
+# ---------------------------------------------------------------------------
+# ISOLATION — THE IMPORTANT PART
+#
+# A preview MUST NOT touch the production database. Two separate mechanisms
+# enforce that, because one is enough to lose a customer's booking:
+#
+#   1. A throwaway Postgres service container, unique to the job. Production
+#      credentials are never in scope: this job declares no `environment:` and
+#      therefore has NO access to the production environment's secrets. There is
+#      no production DATABASE_URL available to it at all.
+#   2. The seed runs against that container only. `prisma/seed.ts` is
+#      idempotent-by-empty-database, so the preview starts from a clean slate.
+#
+# If you ever add `environment: production` to this file, you have broken the
+# isolation guarantee. There is a preflight check below that fails the build if
+# you try.
+# ---------------------------------------------------------------------------
+#
+# ---------------------------------------------------------------------------
+# FEATURE FLAGS
+#
+# Anything not ready to launch runs behind a flag that is OFF in production and
+# ON in previews. This workflow is where a flag gets exercised for the first
+# time, against seeded data, before the shop ever sees it.
+#
+# Convention (no extra dependency — a plain env var read in the app):
+#   NEXT_PUBLIC_FEATURE_<NAME>=true   client-visible features
+#   FEATURE_<NAME>=true               server-only features
+#
+# Current flags (declared in the job below, wired in src/):
+#   FEATURE_WAIVER_RENEWAL_PROMPOS   the renewal-proposal flow
+#   FEATURE_REVIEW_SYNC              live Google/Facebook review sync
+#   FEATURE_ONLINE_QUOTE_V2           the rewritten estimator
+#
+# A flag that is off must degrade to the previous behaviour, not to an error.
+# ---------------------------------------------------------------------------
+# ============================================================================
+
+name: Preview
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  # One preview per PR. A new push replaces the old preview.
+  group: preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20.11.0"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  # ==========================================================================
+  # 0. Isolation preflight — fail loudly if this job could ever reach prod
+  # ==========================================================================
+  isolation-check:
+    name: 0 · isolation check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Assert this workflow declares no production environment
+        run: |
+          set -euo pipefail
+          wf=".github/workflows/preview.yml"
+          if grep -nE '^\s*environment:\s*production' "$wf"; then
+            echo "::error title=Preview isolation broken::A preview job declares 'environment: production'. That hands this workflow the production DATABASE_URL and every other production secret. A seeded migration against the live shop's booking history is unrecoverable."
+            exit 1
+          fi
+          echo "No production environment is referenced by this workflow."
+
+      - name: Assert the seed does not target an external database
+        run: |
+          set -euo pipefail
+          if [ ! -f prisma/seed.ts ]; then
+            echo "::notice::prisma/seed.ts does not exist yet (backend-core owns it). The preview will start with an empty database."
+            exit 0
+          fi
+          # The seed must read DATABASE_URL from the environment and nowhere
+          # else. A hardcoded connection string in the seed is the exact bug
+          # this check exists to catch — and it is a bug that cannot be caught
+          # any other way, because it fails against real customer data.
+          #
+          # Matches `postgres://user:password@host`. Both postgres:// and
+          # postgresql:// are covered; localhost and the compose service name
+          # are the only hosts allowed.
+          if grep -nE 'postgres(ql)?://[^:[:space:]]+:[^@[:space:]]+@' prisma/seed.ts \
+             | grep -vE '@(localhost|postgres|127\.0\.0\.1)' ; then
+            echo "::error title=Hardcoded connection string::prisma/seed.ts contains a literal database URL pointing at a host other than localhost. It must read process.env.DATABASE_URL."
+            exit 1
+          fi
+          echo "prisma/seed.ts reads DATABASE_URL from the environment."
+
+  # ==========================================================================
+  # 1. Preview build + seed + smoke test
+  # ==========================================================================
+  preview:
+    name: preview build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    needs: [isolation-check]
+    permissions:
+      contents: read
+      # Write the preview comment and push the deployment record. Read-only
+      # elsewhere; the preview has no access to any production secret.
+      pull-requests: write
+      deployments: write
+
+    services:
+      preview-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: preview
+          POSTGRES_PASSWORD: preview
+          POSTGRES_DB: preview
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U preview -d preview"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+          --tmpfs /var/lib/postgresql/data
+
+    env:
+      # Scoped to this job. This URL resolves to the service container above and
+      # to nothing else in the world.
+      DATABASE_URL: postgresql://preview:preview@localhost:5432/preview?schema=public
+      NODE_ENV: production
+      # Stubs — this build never talks to Twilio, Resend or Sentry.
+      AUTH_SECRET: preview-stub-not-a-secret-0000000000000000000000
+      PII_ENCRYPTION_KEY: preview-stub-not-a-secret-0000000000000000000000
+      WEBHOOK_SIGNING_SECRET: preview-stub-not-a-secret
+      LOG_LEVEL: info
+      # Rate limits are effectively off in a preview: a reviewer loading the
+      # book page five times should not hit a 429 and think the flow is broken.
+      RATE_LIMIT_PUBLIC_PER_MINUTE: "1000"
+      RATE_LIMIT_BOOKING_PER_HOUR: "1000"
+      RATE_LIMIT_QUOTE_PER_HOUR: "1000"
+      # No CAPTCHA in a preview — nobody reviewing a PR is a bot.
+      CAPTCHA_ENABLED: "false"
+
+      # ---- FEATURE FLAGS: everything not launch-ready is ON here ----------
+      # Each of these MUST default to off in production. Their presence here is
+      # how a feature gets its first real exercise against seeded data.
+      FEATURE_WAIVER_RENEWAL_PROMPOS: "true"
+      FEATURE_REVIEW_SYNC: "true"
+      FEATURE_ONLINE_QUOTE_V2: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # ---- Schema -------------------------------------------------------
+      - name: Apply the schema
+        run: |
+          set -euo pipefail
+          if [ -d prisma/migrations ] && [ -n "$(ls prisma/migrations 2>/dev/null | grep '^2' || true)" ]; then
+            npx prisma migrate deploy
+          else
+            npx prisma db push --skip-generate --accept-data-loss
+          fi
+
+      # ---- Seed ---------------------------------------------------------
+      # The seed must be idempotent: running it twice must not duplicate
+      # services or create a second admin. If it is not, this is where a PR
+      # finds out, which is exactly the point of a preview.
+      - name: Seed the preview database
+        run: |
+          set -euo pipefail
+          if [ ! -f prisma/seed.ts ]; then
+            echo "::warning::prisma/seed.ts not found. The preview will run against an empty database — pages that read from the DB will show their empty states."
+            exit 0
+          fi
+          npx tsx prisma/seed.ts
+
+      - name: Prove the seed is idempotent
+        if: hashFiles('prisma/seed.ts') != ''
+        run: |
+          set -euo pipefail
+          # The assertion is deliberately simple: a non-idempotent seed throws
+          # on a duplicate unique key and exits non-zero. There is nothing to
+          # check beyond "the second run exits 0".
+          npx tsx prisma/seed.ts
+          echo "::notice::The second seed run exited cleanly — the seed is idempotent."
+
+      - name: Generate the social cards
+        run: node scripts/generate-og.mjs
+
+      # NEXT_PUBLIC_SITE_URL is inlined at build time, so it must be set here,
+      # not at run time, for the preview's canonical tags to point at the
+      # preview URL.
+      - name: Build with the preview origin
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ steps.origin.outputs.url }}
+        id: origin
+        run: |
+          url="https://${{ github.event.pull_request.head.repo.full_name || 'local' }}-${{ github.event.pull_request.number || '0' }}.vercel.app"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Building for ${url}"
+          npm run build
+
+      - name: Start the preview server
+        run: |
+          npx next start -p 3000 -H 127.0.0.1 > /tmp/preview.log 2>&1 &
+          echo $! > /tmp/preview.pid
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+              echo "Preview server up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error title=Preview server did not start::"
+          cat /tmp/preview.log
+          exit 1
+
+      # A preview is exactly where a broken page should be caught: it costs
+      # nothing and nobody is driving to Balanga.
+      - name: Smoke test the preview
+        run: |
+          set -euo pipefail
+          # The placeholder phone is EXPECTED in a preview (site.ts is
+          # orchestrator-owned and the owner has not confirmed a number yet),
+          # so the placeholder assertion is relaxed here and only here.
+          SMOKE_EXPECT_TEL="tel:+639000000000" \
+            node scripts/smoke-test.mjs \
+              --base-url=http://127.0.0.1:3000 \
+              --retries=2 \
+              --timeout=20000 \
+              --verbose
+
+      - name: Stop the preview server
+        if: always()
+        run: kill "$(cat /tmp/preview.pid)" 2>/dev/null || true
+
+      - name: Upload the smoke report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          name: preview-smoke-${{ github.event.pull_request.number || github.run_id }}
+          path: /tmp/preview-smoke.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ==========================================================================
+  # 2. Publish the preview URL and the feature-flag list
+  # ==========================================================================
+  comment:
+    name: publish the preview URL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    needs: [preview]
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Comment on the PR
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7 (SHA-pinned; renovate bumps it)
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require("fs");
+            const marker = "<!-- eyg-preview -->";
+            const pr = context.issue.number;
+
+            const FLAGS = [
+              ["FEATURE_WAIVER_RENEWAL_PROMPOS", "renewal-proposal flow"],
+              ["FEATURE_REVIEW_SYNC", "live Google/Facebook review sync"],
+              ["FEATURE_ONLINE_QUOTE_V2", "rewritten online estimator"],
+            ];
+
+            let body;
+            const previewOk = "${{ needs.preview.result }}" === "success";
+
+            if (previewOk) {
+              const origin = "${{ needs.preview.outputs.preview_url }}" || "";
+              body = [
+                marker,
+                "### Preview",
+                "",
+                origin
+                  ? `[Open the preview of this branch](${origin})`
+                  : "The preview built and passed its smoke test. No public URL is published — see docs/ops/DEPLOYMENT.md §8.5 to enable Vercel previews for fork PRs.",
+                "",
+                "**Feature flags ON in this preview** (all OFF in production):",
+                ...FLAGS.map(([f, d]) => `- \`${f}\` — ${d}`),
+                "",
+                "_Isolated database, seeded, no access to production secrets._",
+                "_Rate limiting and CAPTCHA are disabled here so a reviewer can actually use the booking flow._",
+              ].join("\n");
+            } else {
+              body = [
+                marker,
+                "### Preview failed",
+                "",
+                "The preview did not build, seed or smoke-test cleanly, so there is nothing to review here.",
+                "",
+                "Check the [preview run](https://github.com/" + context.repo.owner + "/" + context.repo.repo + "/actions/runs/" + context.run_id + ") for the failing step.",
+              ].join("\n");
+            }
+
+            // Update the existing comment rather than posting a new one on
+            // every push. A PR with 40 pushes should have one comment, not 40.
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }

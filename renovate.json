@@ -1,0 +1,93 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":dependencyDashboard",
+    ":maintainLockFilesWeekly",
+    ":prConcurrentLimitNone",
+    ":ignoreModulesAndTests"
+  ],
+  "timezone": "Asia/Manila",
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 4,
+  "prHourlyLimit": 3,
+  "branchPrefix": "renovate/",
+  "commitMessagePrefix": "chore(deps):",
+  "rebaseStalePrs": true,
+  "separateMajorMinor": true,
+  "separateMultipleMajor": true,
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 4am monday"],
+    "automerge": false
+  },
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"]
+  },
+  "osvVulnerabilityAlerts": {
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"]
+  },
+  "packageRules": [
+    {
+      "description": "Security fixes always re-run the full gate and are never auto-merged.",
+      "matchSeverityLevels": ["critical", "high"],
+      "automerge": false,
+      "labels": ["dependencies", "security"]
+    },
+    {
+      "description": "Framework layer majors need a human reading the changelog.",
+      "matchPackageNames": ["next", "react", "react-dom", "@prisma/client", "prisma"],
+      "matchUpdateTypes": ["major", "minor"],
+      "rangeStrategy": "pin",
+      "automerge": false,
+      "labels": ["dependencies", "needs-manual-review"]
+    },
+    {
+      "description": "Pin exact versions for the framework layer so a rebuild is reproducible.",
+      "matchPackageNames": ["next", "react", "react-dom", "@prisma/client", "prisma"],
+      "rangeStrategy": "pin"
+    },
+    {
+      "description": "Dev-only tooling can ride minors unattended once CI is green.",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    }
+  ],
+  "npm": {
+    "enabled": true
+  },
+  "docker": {
+    "enabled": true,
+    "pinDigests": false
+  },
+  "github-actions": {
+    "enabled": true,
+    "pinDigests": true
+  },
+  "regexManagers": [
+    {
+      "description": "Keep the Dockerfile base image on a current Node 20 Alpine tag.",
+      "fileMatch": ["(^|/)Dockerfile$"],
+      "matchStrings": ["ENV NODE_VERSION=(?<currentValue>[^\\s]+)"],
+      "depNameTemplate": "node"
+    },
+    {
+      "description": "Keep the local Node pin in .nvmrc current.",
+      "fileMatch": ["(^|/)\\.nvmrc$"],
+      "matchStrings": ["^(?<currentValue>\\d+\\.\\d+\\.\\d+)$"],
+      "datasourceTemplate": "node-version"
+    },
+    {
+      "description": "Keep the docker-compose Postgres image current.",
+      "fileMatch": ["(^|/)docker-compose\\.ya?ml$"],
+      "matchStrings": ["image:\\s*postgres:(?<currentValue>[\\d.]+-alpine)"],
+      "depNameTemplate": "postgres"
+    }
+  ],
+  "ignorePaths": ["**/node_modules/**", "**/.next/**", "docs/**"]
+}

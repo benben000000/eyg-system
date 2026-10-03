@@ -1,0 +1,141 @@
+# ============================================================================
+# EYG Tire & Auto Care — CODEOWNERS
+# ============================================================================
+# Who must review a change before it can merge.
+#
+# HOW THIS IS ENFORCED
+# CODEOWNERS alone is a suggestion. It only becomes a requirement when branch
+# protection requires it:
+#   Settings → Branches → Branch protection rules → main →
+#     ☑ Require a pull request before merging
+#     ☑ Require approvals: 1
+#     ☑ Require review from Code Owners      <-- THIS is the line that matters
+#     ☑ Require conversation resolution before merging
+#     ☑ Require status checks to pass (select all of the CI checks below)
+#     ☑ Require branches to be up to date before merging
+#     ☑ Do not allow bypassing the above settings
+#
+# STATUS CHECKS TO REQUIRE (exact names as they appear on a PR):
+#   1 · validate-env      2 · lint        3 · typecheck
+#   4 · prisma-validate   5 · security-audit
+#   7 · build             8 · docker-build   9 · lighthouse
+# (6 · test is deliberately NOT required yet — see the comment there.)
+#
+# ---------------------------------------------------------------------------
+# A NOTE ON THE PLACEHOLDER HANDLERS
+# The handles below are the documented GitHub-style team placeholders. Replace
+# them with real accounts BEFORE enabling "Require review from Code Owners" —
+# a CODEOWNERS line pointing at a team that does not exist makes EVERY pull
+# request unmergeable, and the fast path to "just turn it off" is worse than
+# not having it at all.
+# ============================================================================
+
+# ---------- Default: devops owns anything not claimed below ----------
+# The reason this is first: CODEOWNERS uses LAST-MATCH-WINS, so the default has
+# to come first and the specific paths after it.
+*                                       @acme/devops
+
+# ---------- Secrets, deploys, CI ----------
+# A change here can take the shop's domain down or leak a credential. Two
+# reviewers, always.
+.github/workflows/deploy-production.yml  @acme/devops @acme/lead
+.github/workflows/preview.yml            @acme/devops
+.github/workflows/ci.yml                  @acme/devops
+.github/workflows/codeql.yml              @acme/devops
+.github/workflows/secret-scan.yml         @acme/devops
+.github/workflows/dependency-review.yml   @acme/devops
+.github/dependabot.yml                    @acme/devops
+.github/CODEOWNERS                        @acme/devops
+.github/pull_request_template.md          @acme/devops
+.github/ISSUE_TEMPLATE/                   @acme/devops
+.github/lighthouserc.json                 @acme/devops
+Dockerfile                                @acme/devops @acme/lead
+.dockerignore                             @acme/devops
+docker-compose.yml                        @acme/devops
+vercel.json                               @acme/devops @acme/lead
+fly.toml                                  @acme/devops
+render.yaml                               @acme/devops
+renovate.json                             @acme/devops
+.nvmrc                                    @acme/devops
+.editorconfig                             @acme/devops
+
+# Scripts hold the deploy gates. A one-character change to smoke-test.mjs is a
+# change to what "safe to ship" means.
+scripts/**                                @acme/devops @acme/lead
+
+# Ops runbooks. The incident procedure being wrong during an incident is how a
+# SEV2 becomes a SEV1.
+docs/ops/**                              @acme/devops @acme/lead
+
+# ---------- Business facts: orchestrator only ----------
+# site.ts is the phone number, the address, the hours and the prices. An
+# unreviewed change here puts a wrong number in front of a stranded customer.
+# The orchestrator agent owns it; in a human team this is the shop owner's data.
+src/config/site.ts                        @acme/lead
+
+# ---------- Schema: orchestrator + backend ----------
+# prisma/schema.prisma is the booking history. A destructive change needs a
+# migration plan attached to the PR (see docs/ops/DEPLOYMENT.md §6.3).
+prisma/schema.prisma                     @acme/lead @acme/backend
+prisma/migrations/**                      @acme/lead @acme/backend
+prisma/seed.ts                            @acme/backend
+
+# ---------- The env contract ----------
+# .env.example is what an operator copies when setting up a deployment. A key
+# that disappears from it is a deployment that boots broken.
+.env.example                              @acme/lead @acme/backend
+src/lib/env.ts                            @acme/lead @acme/backend
+src/lib/server/**                          @acme/backend
+src/middleware.ts                          @acme/lead @acme/backend
+
+# ---------- Public API surface ----------
+# src/lib/types.ts is the API contract every other agent codes against.
+src/lib/types.ts                          @acme/lead
+src/app/api/**                             @acme/backend @acme/lead
+
+# ---------- Brand ----------
+# A colour or a logo change is a brand change. Measured values only: the brand
+# yellow is #FCC605 and it is not a matter of taste.
+src/app/globals.css                       @acme/lead
+src/app/icon.svg                          @acme/brand
+src/app/apple-icon.png                    @acme/brand
+public/brand/**                           @acme/brand
+public/og/**                              @acme/brand @acme/devops
+docs/brand/**                             @acme/brand
+brand/**                                  @acme/brand
+
+# ---------- Content ----------
+src/content/**                            @acme/marketing @acme/lead
+docs/marketing/**                         @acme/marketing
+
+# ---------- Frontend ----------
+src/app/layout.tsx                        @acme/frontend @acme/lead
+src/app/page.tsx                          @acme/frontend @acme/lead
+src/app/**/page.tsx                       @acme/frontend
+src/app/**/layout.tsx                     @acme/frontend
+src/components/**                         @acme/frontend
+src/app/robots.ts                         @acme/frontend @acme/devops
+src/app/sitemap.ts                        @acme/frontend @acme/devops
+src/lib/seo.ts                            @acme/frontend @acme/lead
+
+# ---------- Tests ----------
+# Nobody owns tests in the sense of "must fix", but a test deletion needs a
+# deliberate reviewer: deleting a failing test is how coverage quietly rots.
+tests/**                                  @acme/qa @acme/lead
+vitest.config.ts                          @acme/qa
+playwright.config.ts                      @acme/qa
+
+# ---------- Build configuration ----------
+# package.json and tsconfig.json change the shape of every build in the repo.
+package.json                              @acme/lead
+tsconfig.json                             @acme/lead
+next.config.ts                            @acme/lead @acme/devops
+postcss.config.mjs                        @acme/frontend
+package-lock.json                         @acme/devops
+
+# ---------- Research ----------
+docs/research/**                          @acme/research
+content/**                                @acme/research
+
+# ---------- Everything not claimed above ----------
+docs/**                                   @acme/devops
