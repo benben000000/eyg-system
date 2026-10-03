@@ -622,3 +622,164 @@ So the state of the performance gate is: **harness faults fixed, site defects
 measured and outstanding, three assertions of unproven satisfiability flagged.**
 The deploy guard stays red until the four real ones are addressed, which is what it
 is for.
+## 17. Why the SEO metadata is in the body, and what the site actually weighs
+
+Two open questions from §16, answered by measurement rather than by argument.
+Nothing in the site changed as a result — this section records what was ruled out
+so the same ground is not covered twice.
+
+### 17.1 The metadata defect, narrowed to a single line of code
+
+The defect is real: `<title>`, `<meta name="description">`, `<link rel="canonical">`
+and the Open Graph tags render in the BODY, at the end of the document, where
+`document.head` cannot see them. Lighthouse scores `meta-description` 0 for
+exactly that reason, which is why SEO sits at 91 with no individual SEO audit
+failing — the category has nothing to score.
+
+`</head>` closes at byte 2,564. `<title>` begins at 109,371, immediately after
+React's LAST boundary-reveal script:
+
+    </script><div hidden id="S:5"></div><script nonce="...">$RC("B:5","S:5")</script><title>…
+
+So the shell closes `</head>` first, and the metadata arrives in the trailing
+stream. Everything below is a change-and-re-fetch, not an argument.
+
+**Changed on the committed code; no page moved:**
+
+| change                                              | result                    |
+| --------------------------------------------------- | ------------------------- |
+| remove this layout's custom `<head>`                  | no change                 |
+| remove the root `src/app/loading.tsx` boundary        | no change                 |
+| remove `output: "standalone"` from `next.config.ts`   | no change                 |
+
+**Probe routes with identical markup and metadata, differing in one respect.
+Each rendered its metadata CORRECTLY, in `<head>`:**
+
+| probe                                        | result    |
+| -------------------------------------------- | --------- |
+| nothing awaited, no directive                 | IN HEAD   |
+| `export const dynamic = "force-dynamic"`      | IN HEAD   |
+| `await` in the page component                 | IN HEAD   |
+| `await` inside `<Suspense>`                   | IN HEAD   |
+| `await searchParams`                          | IN HEAD   |
+
+That kills the standing theory. **Dynamic rendering is not the cause** —
+`force-dynamic` is a flag, not a suspension, and it is fine. The cause is the
+await itself.
+
+**Confirmed by two further builds:**
+
+1. Replace this layout's `await headers()` with a literal nonce string. `/` puts
+   its metadata in `<head>`: `<title>` at byte 1,980, `</head>` at 4,954.
+2. Re-introduce the same `await headers()` one level down, in a child server
+   component that renders the theme script and `<Providers>`. The layout becomes
+   synchronous and the metadata goes **straight back into the body** — identical
+   offsets to the committed code on all six pages.
+3. Wrap that child in `<Suspense fallback={null}>`, which is the obvious next
+   idea and the one worth writing down. **No effect.** All six pages still emit
+   metadata in the body.
+
+So: **any `await headers()` anywhere in the render tree moves this site's
+metadata into the body**, because the document suspends before the shell
+flushes. That is the finding, and it is narrower and stranger than "dynamic
+pages do this".
+
+**The fix, and why it was not applied.** Getting the metadata back into `<head>`
+means no request-scoped read in the render tree at all. The CSP nonce is
+per-request, so the inline scripts would have to be authorised by CSP **hash**
+instead. `themeBootstrap` is a fixed string and its hash is trivial. The problem
+is `next-themes`, which generates its own inline script and would need its exact
+output hashed and pinned to a library version — a build that pins a hash of
+third-party output breaks on a patch bump, silently, by blocking a script.
+
+The failure mode of getting it wrong is a blank page: `script-src` carries
+`'strict-dynamic'`, so an un-nonced, un-hashed script is not merely degraded, it
+is refused. There is no browser on this machine to enforce CSP against, so
+verifying it means shipping it and finding out in front of a customer.
+
+**Not attempted blind.** The `ServerProviders` refactor that proved point 2 was
+reverted; it was worth writing to find the answer and worth nothing to keep,
+because it moved no bytes and moved no tags.
+
+**What is actually at stake.** None of this affects rendering, and none of it
+affects a demonstration. Browsers relocate these elements, so the pages look
+correct. Only machines that read `document.head` — search engines — are affected.
+For a site being shown to a room, this is worth nothing. It is worth fixing before
+the domain is pointed at real traffic, and it is a two-hour job for someone who
+can open a browser and watch the console.
+
+### 17.2 What a first-time visitor downloads, measured
+
+No Lighthouse locally — there is no Chrome — so this measures the build output
+directly: serve the production build, fetch each page, resolve every referenced
+asset to a file on disk, and price it compressed. No build artefacts invented.
+
+Two earlier attempts at this were wrong before they were right, and both failures
+were quiet rather than obvious:
+
+- the first resolved `/_next/static/...` to `.next/_next/static/...` and matched
+  only `<script>` tags with `nonce` before `src`. It reported the stylesheet as
+  0 KB and found no scripts at all — an obviously broken result that still
+  printed as a table.
+- the second reported **raw** bytes. Those overstate everything, because the
+  pages carry a large inline RSC payload that compresses very well.
+
+| page        | TTFB  | HTML raw | HTML brotli | inline RSC | CSS brotli | JS raw   |
+| ----------- | ----- | -------- | ----------- | ---------- | ---------- | -------- |
+| `/`         | 85 ms | 251.8 KB | 21.4 KB     | 138.4 KB   | 12.7 KB    | 662.7 KB |
+| `/services` | 60 ms | 696.0 KB | 32.7 KB     | 413.1 KB   | 12.7 KB    | 667.8 KB |
+| `/book`     | 25 ms | 162.4 KB | 22.1 KB     |  91.6 KB   | 12.7 KB    | 792.4 KB |
+| `/deals`    | 25 ms | 198.6 KB | 19.3 KB     | 108.0 KB   | 12.7 KB    | 701.3 KB |
+| `/contact`  | 24 ms | 175.1 KB | 18.6 KB     |  92.1 KB   | 12.7 KB    | 704.6 KB |
+| `/gallery`  | 18 ms | 165.2 KB | 16.4 KB     |  67.2 KB   | 12.7 KB    | 724.5 KB |
+
+**HTML is not the problem, and it looks like it is.** 696 KB of `/services` is
+almost entirely the inline React Server Component payload, and 413 KB of that is
+RSC. Over the wire it is 32.7 KB. Anyone reading the raw column will reach for
+the wrong optimisation.
+
+**Everything Next built, compressed:**
+
+| kind       | files | raw     | gzip    | brotli  |
+| ---------- | ----- | ------- | ------- | ------- |
+| JavaScript | 105   | 1388.2 KB | 451.7 KB | 390.9 KB |
+| CSS        | 1     |   94.9 KB |  15.5 KB |  12.7 KB |
+| fonts      | 30    |  389.3 KB | 390.0 KB | 389.4 KB |
+| **total**  | 136   | 1872.4 KB | 857.2 KB | 793.0 KB |
+
+**The shared floor — what every route pays before any page-specific code:**
+
+| chunk                            | brotli   |
+| -------------------------------- | -------- |
+| `chunks/framework-*.js`          |  47.9 KB |
+| `chunks/4bd1b696-*.js`           |  45.6 KB |
+| `chunks/1255-*.js`               |  37.2 KB |
+| `chunks/polyfills-*.js`          |  34.3 KB |
+| the one stylesheet               |  12.7 KB |
+| **floor**                        | **129.9 KB** |
+
+Add 16–33 KB of brotli HTML and a cold first visit is **~151 KB**. That is a
+reasonable number for a site of this size. It is not the 2.5-second LCP problem.
+
+**Where the LCP budget actually goes.** The LCP element is a text paragraph. A
+text LCP waits on HTML, then the render-blocking stylesheet, then the webfont for
+that text — and fonts are already compressed, so brotli does nothing for them.
+They are 389.4 KB across 30 files, with the largest at 36.4 KB, and the stylesheet
+carries **44 `@font-face` blocks** (Saira 700/800/900, Barlow 400/500/600/700,
+each across three subsets). The server is not the bottleneck — TTFB is 18–85 ms
+against a 2.5 s budget. The candidate is font delivery, and the first thing worth
+trying is fewer weights, not a smaller bundle.
+
+**One flagged item that is real:** `chunks/polyfills-42372ed130431b0a.js` is
+110 KB raw / 34.3 KB brotli and is loaded by every page. That is the standard
+Lighthouse `legacy-javascript` penalty. It is Next's own output, not something
+this repo chose, and reducing it means supporting fewer browsers — a decision,
+not a bug.
+
+### 17.3 Correcting §16
+
+§16 recorded "Lighthouse says LCP is 3.5–4.3 s and the LCP element is a text
+paragraph, so likely font/render-blocking CSS". The render-blocking CSS half of
+that is **wrong**: 12.7 KB brotli is not 158 ms of blocking on any plausible
+connection. The font half survives. Leaving the wrong half in a log is how the
+next person spends a day chasing a 12 KB stylesheet.

@@ -148,18 +148,45 @@ export default async function RootLayout({
        *   `meta-description` 0 for exactly that reason, and SEO sits at 91 with no
        *   individual SEO audit failing — the category has nothing to score.
        *
-       *     measured: </head> closes at byte 2,564; <title> begins at 109,371.
+       *     measured: </head> closes at byte 2,564; <title> begins at 109,371 —
+       *     immediately after React's LAST boundary-reveal script, `$RC("B:5",
+       *     "S:5")`. The shell had already closed </head> by then.
        *
-       *   Ruled out: this custom `<head>` (removing it changed nothing), and the
-       *   root `src/app/loading.tsx` Suspense boundary (removing it changed
-       *   nothing). What remains is that `await headers()` below makes every route
-       *   dynamic — there are zero prerendered `.html` files — so every response
-       *   streams and the metadata arrives after the last boundary resolves.
+       *   Ruled out by measurement. Each of these was changed and every page was
+       *   re-fetched; each one changed nothing, and each is listed so nobody spends
+       *   the afternoon re-testing it:
+       *     - this custom <head>                              removing it: no change
+       *     - the root src/app/loading.tsx Suspense boundary  removing it: no change
+       *     - output: "standalone" in next.config.ts          removing it: no change
+       *   And each of these was reproduced with a throwaway probe route that
+       *   rendered its metadata CORRECTLY, in <head>:
+       *     - export const dynamic = "force-dynamic"
+       *     - an await in the page component
+       *     - an await inside <Suspense>
+       *     - awaiting searchParams
+       *   So dynamic rendering is NOT the cause. It is the await itself.
        *
-       * The fix for that is not free: the nonce is per-request and cannot be read
-       * without `headers()`. See docs/inventory-decision-log.md.
+       *   Confirmed by two further measurements: replacing this layout's
+       *   `await headers()` with a literal nonce puts `/` in <head> (title at byte
+       *   1,980, </head> at 4,954). Re-introducing the same await one level down, in
+       *   a child component, puts it straight back in the body — and so does
+       *   wrapping that child in <Suspense>, which is the next thing anyone will try.
        *
-       * DO NOT "TIDY" THE SCRIPT BACK INTO A <head> BLOCK. */}
+       *   That is the whole finding: ANY `await headers()` anywhere in the render
+       *   tree moves this site's metadata into the body, because the document
+       *   suspends before the shell flushes.
+       *
+       * The fix is known and it is not free. Getting metadata back into <head>
+       * means no request-scoped read in the tree at all, so the inline scripts must
+       * be authorised by CSP HASH instead of a per-request nonce — which means
+       * hashing next-themes' generated script and pinning it to a library version.
+       * That is a security-architecture change whose failure mode is a blank page,
+       *   and it cannot be tested here because there is no browser to enforce CSP
+       *   against. It is written up in docs/inventory-decision-log.md rather than
+       *   attempted blind. Measured evidence for the whole investigation is in §17.
+       *
+       * DO NOT "TIDY" THE SCRIPT BACK INTO A <head> BLOCK, AND DO NOT MOVE THE
+       * NONCE READ DOWN A LEVEL BELIEVING IT ESCAPES THE PROBLEM. Both were tried. */}
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         <Providers nonce={nonce}>
