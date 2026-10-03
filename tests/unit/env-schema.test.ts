@@ -125,7 +125,7 @@ const VALID_PRODUCTION_ENV: Readonly<Record<string, string | undefined>> = {
   DATABASE_URL: "postgresql://eyg:eyg@db:5432/eyg?schema=public",
   AUTH_SECRET: STRONG_SECRET,
   PII_ENCRYPTION_KEY: STRONG_SECRET_2,
-  WEBHOOK_SIGNING_SECRET: "whsec_0123456789abcdefghijklmnop",
+  WEBHOOK_SIGNING_SECRET: "whsec_0123456789abcdefghijklmnop", // gitleaks:allow — sequential filler
   NEXT_PUBLIC_SITE_URL: "https://eygtireautocare.ph",
   LOG_LEVEL: "info",
 };
@@ -262,7 +262,7 @@ describe("env-schema — fails closed", () => {
   it("rejects RESEND_API_KEY together with SMTP_HOST", async () => {
     const result = await loadEnvWith({
       ...VALID_PRODUCTION_ENV,
-      RESEND_API_KEY: "re_abcdefghijklmnopqrstuvwxyz123456",
+      RESEND_API_KEY: "re_abcdefghijklmnopqrstuvwxyz123456", // gitleaks:allow — the alphabet, obviously fake
       SMTP_HOST: "smtp.example.com",
       SMTP_USER: "user",
       SMTP_PASSWORD: "password",
