@@ -766,6 +766,25 @@ jobs:
       - name: Install
         run: npm ci --no-audit --no-fund
 
+      # Runs before the build, not only before the image build, because the
+      # build's own type check is what trips over a broken context.
+      #
+      # `.dockerignore` used to remove `vitest.config.ts` but not
+      # `vitest.inventory.config.ts`, which imports it. `tsconfig.json` includes
+      # every `.ts` file, so `next build` type-checked the survivor inside the
+      # image and failed with
+      #
+      #   Type error: Cannot find module './vitest.config'
+      #
+      # Every step above this one is green on a workstation, because both files
+      # exist in a checkout. This is the only place the difference is visible
+      # before the build fails, so it is checked explicitly rather than
+      # discovered four minutes into a Docker build.
+      #
+      # Deterministic and offline: no database, no network, no npm install.
+      - name: Check the Docker build context resolves
+        run: npm run check:docker-context
+
       - name: Apply the schema
         run: |
           if [ -d prisma/migrations ] && [ -n "$(ls prisma/migrations 2>/dev/null | grep '^2' || true)" ]; then

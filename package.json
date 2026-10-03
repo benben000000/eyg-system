@@ -10,6 +10,7 @@
     "lint": "next lint --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "check:boundaries": "node scripts/check-client-boundaries.mjs",
+    "check:docker-context": "node scripts/check-docker-context.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "prisma generate",

@@ -58,8 +58,18 @@ blob-report/
 coverage/
 .nyc_output/
 .lighthouseci/
-vitest.config.ts
-playwright.config.ts
+# A GLOB, deliberately. These are excluded by exact name, and `tsconfig.json`
+# includes `**/*.ts` — so any vitest config that survives into the image is
+# type-checked by `next build`. `vitest.inventory.config.ts` imports
+# `./vitest.config`, which this file removes, and the build died with
+#
+#   Type error: Cannot find module './vitest.config' or its corresponding
+#   type declarations.
+#
+# A build that had never compiled before (the base image tag did not exist) is
+# the only thing that could find that. `vitest*.config.ts` covers the next one.
+vitest*.config.ts
+playwright*.config.ts
 *.lcov
 junit*.xml
 
