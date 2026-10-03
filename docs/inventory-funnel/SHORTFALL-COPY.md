@@ -89,7 +89,7 @@ Two options, both real, neither a loss. The second one is the Bay-only route wea
 different hat — offering it here is what stops "come back next week" from becoming the
 customer's only choice.
 
-### The `2 × ` factor on order-in dates
+### The `2 ×` factor on order-in dates
 
 An order-in date is a promise too. Before printing one, require that the expected arrival
 leaves at least **one full working day** of slack before the customer's booking date, because

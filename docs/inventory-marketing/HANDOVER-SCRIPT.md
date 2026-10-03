@@ -6,7 +6,7 @@
 
 ---
 
-## 0. Print this page. That is the whole deliverable.
+## 0. Print this page. That is the whole deliverable
 
 This is not a document to study. It is a card to keep next to the till, and it is written
 in the words you actually say out loud.
@@ -169,7 +169,9 @@ say it here — that's fine. No pressure."
 This is the one mechanic-level instruction that produces a review worth reading.
 
 > ### 🚫 Never: "How were we, 1 to 5?" · "Can you give us five stars?"
+>
 > ### ✅ Ask: **"Ano ang pinaka-nakatulong sa'yo sa amin?"**
+>
 > ### ✅ *"What helped you most about us?"*
 
 Why: the customer's answer becomes the content of the review. Ask for a rating and you get

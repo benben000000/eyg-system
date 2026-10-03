@@ -250,6 +250,7 @@ a card, or a deposit.
 │                                │  Get directions             │
 └────────────────────────────────┴─────────────────────────────┘
 ```
+
 The mobile action bar is `display: none` at ≥ 768 px; the phone is then reachable from
 the sticky header and the summary rail. The wizard's Continue button is inline in the
 wizard column, so FC-1 is satisfied with no bar at all.
@@ -387,6 +388,7 @@ foreach ($selected as $s) {                     // $q = quantity (default 1)
 $buffer = (int)(ceil(($rawMin * 0.15) / 15) * 15);
 $totalMin = $fixedMin + $buffer;
 ```
+
 `duration` shown = `about {formatDuration($rawMin + $buffer)}`;
 `slots` shown = `{ceil(($rawMin + $buffer) / BOOKING.slotMinutes)} bay slots`.
 
@@ -580,6 +582,7 @@ Wed 19 November · 9:00 AM     [Change]     → focus the date strip
 Change Oil, PMS A             [Change]     → focus step 2
 Estimate ₱1,900–₱2,200
 ```
+
 Each `Change` is a real button that moves focus (not just scroll) to the field it
 edits, and announces `{Section} — editing. Step 4 of 4.` through the wizard's live
 region. Editing does not lose the current values.

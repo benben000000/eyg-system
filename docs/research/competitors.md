@@ -59,6 +59,7 @@ All four, plus EYG, are registered in the *same* official category in the *same*
 > centre** — an almost exact match for EYG's Auto Care offering.
 >
 > Three further signals make Jed-M the priority threat:
+>
 > - Its email is `jedmtires2015@gmail.com`. **"2015" strongly suggests it has been
 >   trading since 2015 — roughly a decade of local trust that EYG, which opened
 >   December 2025, does not have.** (Treat the "2015" as an inference, not a fact.)

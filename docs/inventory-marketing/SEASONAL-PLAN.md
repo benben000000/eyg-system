@@ -14,6 +14,7 @@ This is a **build-to-order calendar**, not a forecast. It answers one question p
 > **Which SKU does this shop need to be holding more of, and by when?**
 
 It is **not**:
+
 - ❌ a revenue forecast. Nobody here can forecast a two-bay shop in Balanga.
 - ❌ a demand model. It is a **stock floor** schedule: what must already be on the rack
   when the season arrives, because a reorder takes days and the season does not wait.

@@ -366,48 +366,58 @@ re-announces on every re-render of a polling list.
 Run each at 1280 × 800 and at 360 × 640, keyboard only, with VoiceOver or NVDA.
 
 ### T1 — Receive, twelve lines, no mouse
+
 `r` → type `DR-4471` → `Tab` → type `OIL-FLT-015` `Enter` → type `24` `Enter` → ×12 →
 `Ctrl+Enter`. **Assert:** twelve ledger rows exist, `reference` on every one is `DR-4471`,
 and the operator never left the dialog.
 
 ### T2 — The stray scan
+
 Focus a line's quantity field, type `OIL-FLT-015<Enter>`.
 **Assert:** the quantity is unchanged, `aria-invalid` is not set, nothing was posted, and
 the hint `That's not a number. Scan or search for the item instead.` was announced.
 
 ### T3 — No mouse, no accident
+
 Open Adjust, pick `Remove`, type a quantity, type a reason.
 **Assert:** a bare `Enter` commits nothing. `Shift+Enter` commits once.
 
 ### T4 — The reason cannot be skipped
+
 Open Adjust, fill everything but the reason.
 **Assert:** the commit control is `disabled` and `aria-disabled="true"`; `Add a reason` is
 the next focusable thing.
 
 ### T5 — Single-key guard under composition
+
 Focus the notes field, type `mga` via an IME (composition events).
 **Assert:** no dialog opened, no navigation happened, the text field contains `mga`.
 
 ### T6 — Roving tabindex
+
 On a 200-row product list from a cold load.
 **Assert:** `Tab` from the toolbar lands on the list **once**. 200 further `Tab`s do not
 move through the rows. `↓` moves row focus.
 
 ### T7 — Focus return
+
 Open Receive, `Escape`, decline the confirmation.
 **Assert:** focus is on the trigger button, and the dashboard scroll position is unchanged.
 
 ### T8 — Count resumption
+
 Open a count with 40 lines and 6 counted.
 **Assert:** the first uncounted line's number field has focus, and no `expected` value is
 reachable in the a11y tree until that line is saved.
 
 ### T9 — Whole flow at 200 % zoom, 360 px
+
 Complete T1 at 200 % zoom.
 **Assert:** no horizontal document scroll; the post-all footer stays reachable; no target
 under 44 × 44 px.
 
 ### T10 — Reduced motion
+
 `prefers-reduced-motion: reduce`.
 **Assert:** skeletons are static, nothing pulses, the flow is unchanged. (`DO-NOT.md` §1.5
 rule 52 — the rule is unconditional.)

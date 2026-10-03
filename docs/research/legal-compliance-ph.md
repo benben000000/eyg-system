@@ -36,6 +36,7 @@ paperwork. Resolve it first.
 > 🔴 **OPEN QUESTION, and it is not a detail.** A job-ad snippet on the EYG Tire & Auto
 > Care page reads *"**EYG Tire & Auto Care Corporation** is looking for…"*
 > (`facebook-intel.md` §2.10). If EYG is **incorporated**, then:
+>
 > - "EYG Tire & Auto Care" is a **trade name / assumed name**, not the legal name, and
 > - the **legal name must appear on the Terms page, the footer, the privacy notice and
 >   every receipt**, and
@@ -753,6 +754,7 @@ breaks — be specific. "Nothing on the public pages breaks. The staff login doe
 `[Delete any line that is not true. Delete it the day it stops being true.]`
 
 > **Engineering notes for `frontend-core` / `backend-integrations`:**
+>
 > - **No interstitial, no modal, no cookie wall.** The brief bans it and §7.1 promises
 >   the customer they can still book with cookies blocked. **The copy and the behaviour
 >   must agree.**

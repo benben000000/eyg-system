@@ -60,6 +60,7 @@ without a service context, must not be enumerable one product at a time into a
 catalogue dump, and must never carry cost.
 
 **Concretely required:**
+
 - The public endpoint is a **per-service availability question**, not a product
   browser. One call in, one service's parts out. Not `?productId=` anything.
 - It is rate-limited on its own tier (M-08) so it cannot be walked.

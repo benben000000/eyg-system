@@ -1,4 +1,5 @@
 # PRICING BENCHMARKS — Philippines
+
 ### A1 research · compiled 2026-10-03 · **all URLs and prices checked 2026-10-03 (Asia/Manila)**
 
 ---

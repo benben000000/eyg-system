@@ -55,6 +55,7 @@ env:
   NEXT_PUBLIC_APP_VERSION: "0.0.0-ci"
   # Build-time stubs. NOT credentials — see the header note.
   DATABASE_URL: "postgresql://ci:ci@127.0.0.1:5432/ci?schema=public"
+  DIRECT_URL: "postgresql://ci:ci@127.0.0.1:5432/ci?schema=public"
   AUTH_SECRET: "ci-stub-not-a-secret-0000000000000000000000"
   PII_ENCRYPTION_KEY: "ci-stub-not-a-secret-0000000000000000000000"
   WEBHOOK_SIGNING_SECRET: "ci-stub-not-a-secret"
@@ -84,16 +85,12 @@ jobs:
       # Fails if a key the Zod schema requires is undocumented in .env.example,
       # or if a documented key the app never reads.
       - name: Assert .env.example matches src/lib/env.ts
-        run: |
-          # TODO(orchestrator): three keys are in the Zod schema but missing from
-          # the orchestrator-owned .env.example. They are allowlisted here so
-          # the rest of the contract check is enforced from day one. DELETE this
-          # --allow-undocumented flag once the three lines are added upstream.
-          #   RATE_LIMIT_READ_PER_MINUTE
-          #   ADMIN_EMAIL
-          #   ADMIN_PASSWORD
-          node scripts/validate-env.mjs \
-            --allow-undocumented=RATE_LIMIT_READ_PER_MINUTE,ADMIN_EMAIL,ADMIN_PASSWORD
+        # No --allow-undocumented flag. It once papered over three keys missing
+        # from .env.example, but the real problem was that the PARSER could not see
+        # the schema at all: it reported 4 of 41 keys because a regex literal
+        # ending in `//` desynchronised its brace counter. The three lines have
+        # since been added, so the flag is gone rather than left as a blind spot.
+        run: node scripts/validate-env.mjs
 
   # ==========================================================================
   # 2. lint — any warning fails the build
@@ -388,6 +385,7 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
       AUTH_SECRET: "ci-stub-not-a-secret-0000000000000000000000"
       PII_ENCRYPTION_KEY: "ci-stub-not-a-secret-0000000000000000000000"
       WEBHOOK_SIGNING_SECRET: "ci-stub-not-a-secret"
@@ -534,6 +532,7 @@ jobs:
     env:
       # Overrides the workflow-level stub with the real service container.
       DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
+      DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
@@ -671,6 +670,7 @@ jobs:
             -e PORT=3000 \
             -e HOSTNAME=0.0.0.0 \
             -e DATABASE_URL="postgresql://ci:ci@db:5432/ci?schema=public" \
+            -e DIRECT_URL="postgresql://ci:ci@db:5432/ci?schema=public" \
             -e AUTH_SECRET="ci-runtime-stub-000000000000000000000000000" \
             -e PII_ENCRYPTION_KEY="ci-runtime-stub-000000000000000000000000000" \
             -e WEBHOOK_SIGNING_SECRET="ci-runtime-stub" \
@@ -780,6 +780,7 @@ jobs:
         env:
           NODE_ENV: production
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+          DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
           AUTH_SECRET: lighthouse-stub-not-a-secret-00000000000000000000
           PII_ENCRYPTION_KEY: lighthouse-stub-not-a-secret-00000000000000000000
           WEBHOOK_SIGNING_SECRET: lighthouse-stub

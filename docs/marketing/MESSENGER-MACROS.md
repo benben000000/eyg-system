@@ -60,6 +60,7 @@ Ano ang pwede naming tulungan? Sabihin lang kung ano ang problema sa sasakyan �
 ```
 
 *For an unfamiliar English-language account:*
+
 ```
 Hi! Thanks for messaging EYG Tire & Auto Care — we are on EGSA Fourlanes in Tuyo, Balanga.
 
@@ -250,7 +251,7 @@ Kung unsure ka kung anong ilaw, **larawanin mo at i-send dito**. Sasabihin namin
 If a customer describes a vehicle that could kill someone on the road —
 **including themselves — you stop selling and start protecting.**
 
-### 🔴 RED — do not let them drive. Tell them to stop.
+### 🔴 RED — do not let them drive. Tell them to stop
 
 | Signal | What to say |
 | --- | --- |

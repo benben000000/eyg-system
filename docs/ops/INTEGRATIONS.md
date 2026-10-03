@@ -82,9 +82,11 @@ Source of truth: `.env.example`. Read at runtime through `src/lib/integrations/e
 **Code:** `src/lib/integrations/email.ts`
 
 ### What it does
+
 Sends transactional and (consent-gated) marketing email. Provider order is **Resend → Nodemailer SMTP → no-op**, decided per call from the environment and memoised. Both provider clients are `import()`ed lazily, so a deployment missing either package still boots.
 
 ### Setup — Resend (recommended)
+
 1. Create an account at <https://resend.com> and verify the sending domain
    (`eygtireautocare.ph`) via DNS: SPF, DKIM and a DMARC record.
 2. Create an API key → set `RESEND_API_KEY`.
@@ -94,11 +96,13 @@ Sends transactional and (consent-gated) marketing email. Provider order is **Res
    secret into `RESEND_WEBHOOK_SECRET` (or rely on `WEBHOOK_SIGNING_SECRET`).
 
 ### Setup — SMTP fallback
+
 Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`.
 `SMTP_USER` + `SMTP_PASSWORD` are both required when `SMTP_HOST` is set; the app
 refuses to boot on a half-configured pair.
 
 ### The template
+
 - Table-based layout only, `max-width: 600px`, every style inline. No flexbox, no
   `<style>`-dependent layout, no background images — Outlook desktop uses the Word
   rendering engine and ignores all three.
@@ -113,26 +117,31 @@ refuses to boot on a half-configured pair.
   `email.text_alternative_missing`).
 
 ### Idempotency
+
 Every send carries an `idempotencyKey`, passed to Resend as `idempotency_key` and
 recorded in the `Setting`-backed ledger. A duplicate call returns
 `status: "duplicate"` and sends nothing. A **failed** send releases the claim so a
 genuine retry tries again.
 
 ### Rate limits
+
 None imposed by us. Resend: 2 req/s, 100 emails/day on the free tier. Resend's own
 429 is retried twice with exponential backoff, then recorded as `failed`.
 
 ### Cost
+
 Resend free: 3,000 emails/month, 100/day. That is roughly 100 booking confirmations
 a day — comfortably enough. Above that: $20/month for 50,000.
 
 ### Data stored
+
 `Notification` row: masked recipient, subject, redacted body, status, provider id.
 `Subscriber` row for marketing sends (email, `isActive`, `source`).
 Never the full recipient address in the `Notification.recipient` column — it is
 masked by `maskRecipient()`.
 
 ### 2am runbook
+
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | `email.no_provider` in the logs | `RESEND_API_KEY` or `SMTP_*` unset | Set the key. Messages already recorded as `skipped` are not retried automatically. |
@@ -148,6 +157,7 @@ masked by `maskRecipient()`.
 **Code:** `src/lib/integrations/sms.ts`
 
 ### What it does
+
 Transactional confirmations, reminders, cancellations, quote-ready notices, roadside
 ETA, and consent-gated promo/review requests. **Hard 160-character limit, enforced
 twice:**
@@ -162,6 +172,7 @@ twice:**
    with `sms.truncated` and the original/final lengths.
 
 ### Setup
+
 1. <https://www.twilio.com/try-twilio> → Console → get a PH mobile number or an
    alphanumeric sender.
 2. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`. All three or
@@ -173,12 +184,14 @@ twice:**
    `END`, `UNSUBSCRIBE`, `REVOKE`, `OPT OUT`.
 
 ### Sender ID
+
 - A **magic number** (`TWILIO_FROM_NUMBER` starting with `+`) works immediately.
 - An **alphanumeric sender** matches `/^[A-Za-z][A-Za-z0-9 ]{0,10}$/` and is detected
   automatically (`smsConfig().fromIsAlphanumeric`). ⚠️ **See owner action items** — PH
   alphanumeric senders need registration.
 
 ### Consent and opt-out
+
 - `marketing: true` requires `consentMarketing: true` **and** `consentSms !== false`,
   and the body carries `Reply STOP to opt out.`
 - `marketing: false` (transactional) still requires `consentSms !== false`. A
@@ -194,6 +207,7 @@ twice:**
   by call.
 
 ### Third-party PII guard
+
 `thirdPartyPiiRisk()` refuses any message that contains a customer's **full name AND**
 a **vehicle description** when the recipient number was not supplied by that customer.
 This is why the roadside ETA template carries neither: it is read by whoever is nearby.
@@ -201,22 +215,26 @@ The guard fails **closed** — a caller that does not set
 `recipientSuppliedByCustomer: true` is treated as "not supplied".
 
 ### Rate limits
+
 Twilio PH: ~1 message/second per sender, 10,000/day. Our own limiter caps a lead form
 at 4/hour and a promo claim at 5/hour, so a stranger cannot turn the shop's number into
 their SMS bill. Twilio error 429 is mapped to `rate-limited` and recorded as `failed`.
 
 ### Cost
+
 Twilio PH SMS: roughly **₱0.55 per segment** (check current pricing — it changes).
 A 160-character GSM-7 message is one segment. Going over 160 splits it into two and
 doubles the cost, which is why the limit is hard. Alphanumeric sender registration is
 a one-off monthly fee.
 
 ### Data stored
+
 `Notification` row: masked recipient (`+63…67`), redacted body, status, provider id.
 The unmasked number lives on `Booking.customerPhone` / `Customer.phone` — that is the
 shop's own CRM record, not the integration's.
 
 ### 2am runbook
+
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | `sms.no_provider` | `TWILIO_*` unset | Set all three. Skipped messages are not auto-retried. |
@@ -234,6 +252,7 @@ shop's own CRM record, not the integration's.
 **Code:** `src/lib/integrations/whatsapp.ts`
 
 ### The primary path needs nothing
+
 `buildWhatsAppLink(message?)` returns `https://wa.me/<number>?text=<prefilled>`. The
 number and the default text come from `LINKS.whatsapp` in `src/config/site.ts`, so
 the copy has one home. No Meta account, no template approval, no 24-hour window, no
@@ -241,6 +260,7 @@ API key. Every notifier returns this link in its result object, so a UI can alwa
 offer a working WhatsApp button regardless of what the API did.
 
 ### The optional path
+
 Set `WHATSAPP_PHONE_NUMBER_ID` + `WHATSAPP_ACCESS_TOKEN` to enable the Cloud API
 sender. `WHATSAPP_VERIFY_TOKEN` is required for the webhook receiver.
 
@@ -253,6 +273,7 @@ hours. `sendWhatsApp()` therefore **refuses** unless the caller asserts
 cannot accidentally spend a paid conversation on a broadcast.
 
 ### Setup
+
 1. <https://developers.facebook.com> → Business app → WhatsApp → API setup.
 2. Add a phone number, note the **Phone Number ID**, create a permanent access token.
 3. Webhook → `https://<domain>/api/webhooks/whatsapp`, subscribe to
@@ -267,23 +288,28 @@ with 401. An unverified public webhook is a forgery oracle, and the integration 
 optional, so refusing is the correct default.
 
 ### Inbound customer messages
+
 Counted and logged, **never auto-persisted**. A reply from a stranger must not be able
 to create rows in the shop's books. Turning a reply into an automatic `Lead` is an
 owner decision, listed below.
 
 ### Rate limits
+
 Cloud API: 80 messages/second (application), 1,000 conversations/phone/month on
 Business. We send replies only, so this is never the constraint.
 
 ### Cost
+
 Free tier: 1,000 conversations/month. Above that, per-conversation pricing applies —
 which is another reason the 24-hour guard exists.
 
 ### Data stored
+
 `Notification` row (channel `whatsapp`), masked recipient, body, `wamid` as
 `providerId`.
 
 ### 2am runbook
+
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | `whatsapp.rejected` with `no-secret` | `WHATSAPP_VERIFY_TOKEN` unset | Set it. Until then the receiver rejects everything — `wa.me` links are unaffected. |
@@ -299,6 +325,7 @@ which is another reason the 24-hour guard exists.
 **Code:** `src/lib/reviews/{google,facebook,aggregate,cache}.ts`, `src/app/api/reviews/route.ts`
 
 ### Google
+
 - **Setup:** claim the Google Business Profile → **Get Place ID** → enable **Places API
   (New)** on a Google Cloud project → create an API key.
   **Restrict the key** to the Places API and add server-side IP restrictions
@@ -326,6 +353,7 @@ which is another reason the 24-hour guard exists.
 >
 > ⚠️ **Graph API access requires a Meta App Review.** `FACEBOOK_PAGE_ACCESS_TOKEN` alone
 > is not enough. To read a page's recommendations you need:
+>
 > 1. A Business app with the `pages_read_engagement` permission.
 > 2. **App Review approval** for that permission (screenshots + a working video).
 > 3. The app in **Live** mode.
@@ -344,6 +372,7 @@ the mechanic copies across from Messenger at the counter. For a 308-follower sho
 Balanga that is the higher-quality signal anyway.
 
 ### Aggregate
+
 `getPublishedReviews({ limit, serviceTag, minRating, cursor })` orders
 **`isFeatured DESC, publishedAt DESC, id ASC`**. The `id` tiebreak is load-bearing: two
 reviews published in the same millisecond must not swap places between requests, or the
@@ -355,6 +384,7 @@ module exists to avoid. `average` is `null` when there is nothing to average —
 `0`, never `5`.
 
 ### Cache
+
 - In-process, TTL 30 min (`REVIEWS_CACHE_TTL_MS`), stale window 24 h
   (`REVIEWS_CACHE_STALE_MS`).
 - **Stale-while-revalidate:** a stale value is returned instantly and a background
@@ -367,17 +397,20 @@ module exists to avoid. `average` is `null` when there is nothing to average —
   shop ever runs multi-region active/active.
 
 ### `GET /api/reviews`
+
 `Cache-Control: public, max-age=300, stale-while-revalidate=3600` + a content `ETag`
 (`If-None-Match` → 304). Rate limited on the `reads` tier (240/min, **fails open** on
 infrastructure error — availability of a cached read beats a 503 for a stranded
 customer).
 
 ### Data stored and retention
+
 `Review`: source, external id, author display name, rating, title, body, service tag,
 publishedAt, isFeatured, isPublished, syncedAt. Revalidated hourly; rows are never
 deleted by a sync.
 
 ### 2am runbook
+
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | Reviews vanished from the homepage | `log.error("reviews.load_failed")` | The database is down or unmigrated. `GET /api/ready` with the probe secret. |
@@ -394,6 +427,7 @@ deleted by a sync.
 **Code:** `src/app/api/leads/route.ts`, `src/lib/integrations/crypto.ts`
 
 ### Defences, all of which run on every request
+
 1. **Rate limit** — per-kind tier: roadside 4/h, newsletter 3/h, contact and tire-size
    6/h. All **fail closed** on infrastructure error: what they protect is a message to
    the shop's own phone number.
@@ -409,6 +443,7 @@ deleted by a sync.
    `GET /api/captcha`. `newsletter` skips it: there is no third party to notify.
 
 ### PII encryption at rest
+
 `name`, `phone`, `email` and `message` are encrypted with AES-256-GCM before the row is
 written. Envelope (`src/lib/integrations/crypto.ts`):
 
@@ -436,22 +471,26 @@ fails closed instead of decrypting to garbage.
   needed; it is not a substitute for encryption.
 
 ### Notification
+
 Every accepted lead fires `notifyNewLeadAlert()` to the shop: **email always, plus SMS
 for `roadside`**. A stranded customer is a phone call, and at 2am the email is not what
 the mechanic is looking at.
 
 ### Failure behaviour
+
 No database → the lead is still answered `201` with a `wa.me` link and the failure is
 logged. Telling a stranded customer "our database is down" is a worse outcome than
 losing the row. No Twilio/Resend → the row is written and the notification recorded as
 `skipped`; the shop sees it on the board.
 
 ### Data stored and retention
+
 `Lead`: kind, encrypted name/phone/email/message, non-PII meta (reference, UTM, page,
 which captcha ran), status, createdAt. The `meta` column is whitelisted and length-
 capped because the UTM set is attacker-controlled. Retention: 24 months, then purge.
 
 ### 2am runbook
+
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | Leads arrive but the shop is not alerted | `NEW_LEAD_ALERT` rows in `Notification` | `skipped` = no provider. `blocked` = policy. `failed` = provider error with a code. |
@@ -467,6 +506,7 @@ capped because the UTM set is attacker-controlled. Retention: 24 months, then pu
 **Code:** `src/app/api/promos/route.ts`, `src/app/api/promos/[slug]/claim/route.ts`
 
 ### `GET /api/promos`
+
 Ordered by `priority DESC` (a staff decision). Each promo carries a computed `isLive`
 plus explicit `isUpcoming` / `isExpired` / `daysRemaining`, and `startsAt` / `endsAt`
 echoed as `+08:00` ISO strings so a countdown never has to guess the offset. The shop
@@ -483,6 +523,7 @@ CDN-cached hit does not increment. The number is "impressions on uncached reques
 documented rather than quietly overstated. Use the `claimCount` for real intent.
 
 ### `POST /api/promos/[slug]/claim`
+
 - Rate limit 5/hour (**fails closed** — a claim sends an SMS).
 - Zod against exactly the `PromoClaimInput` shape from `src/lib/types.ts`; unknown
   fields are stripped, not forwarded.
@@ -497,6 +538,7 @@ documented rather than quietly overstated. Use the `claimCount` for real intent.
   list in the email and behind the link).
 
 ### 2am runbook
+
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | `/deals` is empty | `promos.list` returning `[]` | Either no active rows, or the database is down. `isActive` + the date window. |
@@ -512,6 +554,7 @@ documented rather than quietly overstated. Use the `claimCount` for real intent.
 **Code:** `src/lib/integrations/webhook-verify.ts`, `src/app/api/webhooks/*/route.ts`
 
 ### The rule that matters
+
 **Signatures are computed over the raw bytes.** `request.json()` re-serialises,
 reorders keys, drops duplicate keys and normalises unicode — a signature computed over
 a parsed body mismatches roughly half the time, and the tempting "fix" is to disable
@@ -531,6 +574,7 @@ Resend additionally rejects a timestamp more than 300 s from now (replay protect
 accepts **multiple** `v1,` signatures so a secret rotation works without a forgery window.
 
 ### Idempotency on events
+
 Every event is claimed in the `Setting`-backed ledger on the provider's own id:
 `SmsSid:status`, the Svix `svix-id`, or `wamid:status`. A provider retry gets
 `duplicate` and is acknowledged without re-applying. The status update is itself an
@@ -540,6 +584,7 @@ Terminal states never walk backwards: a late `delivered` after a `failed` is pro
 noise, not new information, and is ignored.
 
 ### Resend suppression — the most important write on the site
+
 `email.bounced` and `email.complained` both run `suppressSubscriber()`:
 
 - `Subscriber.isActive = false`
@@ -556,6 +601,7 @@ way back. One complaint can cost the shop the ability to email a booking confirm
 at all, which is why this is the strictest rule in the codebase.
 
 ### 2am runbook
+
 | Symptom | Check | Fix |
 | --- | --- | --- |
 | `twilio.rejected` / `resend.rejected` with `mismatch` | URL or secret drift | Twilio: `TWILIO_WEBHOOK_BASE_URL` behind a proxy. Resend: the webhook secret in the Resend dashboard. |
@@ -603,11 +649,13 @@ rows abandoned in `queued` by a process that died mid-send.
 ## 11. Health, readiness, cron
 
 ### `GET /api/health` — liveness
+
 `{ status, version, uptime, requestId }`. **No database call, no network call**, and it
 imports nothing that can throw. A load balancer must not pull an instance because
 Postgres is slow — that turns a partial outage into a total one.
 
 ### `GET /api/ready` — readiness
+
 Checks the database (`SELECT 1`, 3 s timeout) and migrations
 (`_prisma_migrations`), plus the **configuration** of email/SMS/reviews. Reports each
 as `up | down | degraded` with a latency number.
@@ -624,6 +672,7 @@ not make an instance un-ready, because nothing depends on it being up.
   `failed-migration`, `no-provider-configured`.
 
 ### Cron
+
 `GET|POST /api/cron?job=<name>` plus four individual routes. Both paths call the same
 functions.
 
@@ -703,6 +752,7 @@ change there cannot break a send.
 Ordered by how long they take. Items 1–3 are needed before launch.
 
 ### 1. ☐ Email — domain verification and deliverability
+
 - Verify `eygtireautocare.ph` on Resend (SPF, DKIM, DMARC).
 - Publish a DMARC record with `p=none` first, move to `p=quarantine` after a week of
   clean reports.
@@ -712,6 +762,7 @@ Ordered by how long they take. Items 1–3 are needed before launch.
 - Set `EMAIL_FROM` to a real mailbox.
 
 ### 2. ☐ SMS — PH sender registration ⚠️
+
 - **Alphanumeric sender ID:** request registration from Twilio. PH alphanumeric
   senders require a **registered business name, DTI/BIR registration, and the
   express-courier/express-tender designation or a registered trade name**. Expect a lead
@@ -730,6 +781,7 @@ Ordered by how long they take. Items 1–3 are needed before launch.
   enforced in code; this is the operational half.
 
 ### 3. ☐ Confirm the business facts
+
 `src/config/site.ts` is the single source of truth and these are all `TODO-VERIFY`:
 `phoneE164`, `phoneDisplay`, `whatsappNumber`, `email`, `emailSupport`, `lat`/`lng`,
 `plusCode`, `messenger`, `trust.*` (rating value, rating count, years, bays,
@@ -737,6 +789,7 @@ technicians), and `foundedYear`. **A wrong phone number here breaks the entire
 conversion ladder** — the whole site's top-of-funnel is "call the shop".
 
 ### 4. ☐ Google — API key with IP restrictions
+
 - Claim and verify the Google Business Profile (do this even if you skip the API — it
   is the single highest-ROI local-SEO action available).
 - Get the **Place ID**.
@@ -748,7 +801,9 @@ conversion ladder** — the whole site's top-of-funnel is "call the shop".
 - Review the Place's **Q&A** section and reply to the seed questions.
 
 ### 5. ☐ Facebook — App Review (optional, low value for now)
+
 Only worth doing if the shop wants Facebook recommendations on the site.
+
 - Create a Business app; add `pages_read_engagement`.
 - **App Review:** screenshots of the product, a working demo video, and a plain-English
   justification. Expect days to weeks.
@@ -759,6 +814,7 @@ Only worth doing if the shop wants Facebook recommendations on the site.
 - **Never scrape Facebook.** It is a ToS violation and a Data Privacy Act breach.
 
 ### 6. ☐ WhatsApp (optional)
+
 - Meta Business app → WhatsApp → API setup; add a number, note the Phone Number ID,
   create a permanent token.
 - Set `WHATSAPP_VERIFY_TOKEN` to a random 24+ character string and use the **same**
@@ -770,6 +826,7 @@ Only worth doing if the shop wants Facebook recommendations on the site.
   a stranded driver texting the number is the highest-value event in the system.
 
 ### 7. ☐ Secrets to generate
+
 ```bash
 openssl rand -base64 48   # AUTH_SECRET
 openssl rand -hex 32      # PII_ENCRYPTION_KEY  (64 hex chars)
@@ -777,14 +834,17 @@ openssl rand -base64 32   # WEBHOOK_SIGNING_SECRET
 openssl rand -base64 32   # CRON_SECRET
 openssl rand -hex 24      # WHATSAPP_VERIFY_TOKEN
 ```
+
 Rotating `AUTH_SECRET` logs every staff member out. That is intentional.
 
 ### 8. ☐ Cron scheduling
+
 Configure the four jobs (`docs/ops/INTEGRATIONS.md` § Cron for crontab). On Vercel, add
 them to `vercel.json` with `CRON_SECRET` set — Vercel sends it as
 `Authorization: Bearer $CRON_SECRET`, which this app already accepts.
 
 ### 9. ☐ Reputation groundwork
+
 Ask every satisfied customer for a Google review in the week after their visit
 (`notifyReviewRequest` automates this for consented customers). Do **not** incentivise
 reviews — Google penalises it, and it is not worth the risk to a 308-follower page.
@@ -794,6 +854,7 @@ reviews — Google penalises it, and it is not worth the risk to a 308-follower 
 ## 15. What to do when it breaks at 2am
 
 **First three moves, every time, in this order:**
+
 1. `curl https://eygtireautocare.ph/api/health` — is the process up? (No database call,
    so a `200` here with a broken database is expected and fine.)
 2. `curl -H "Authorization: Bearer $CRON_SECRET" https://<domain>/api/ready` — this is
@@ -808,6 +869,7 @@ Then, by symptom:
 | Check `/api/ready` for `database: down` or `migrations: not-initialised`. If migrations are the problem, run `npm run db:deploy`. | `sms.no_provider` → `TWILIO_*` unset. `sms.twilio_send_failed` + a code → see §4. `blocked` → the customer did not consent; **call them**. | `google.fetch_failed` → §6. If the database is down, the endpoint returns an empty array and the UI shows its designed empty state. That is correct, not a bug. | Find the `Notification` rows for that booking. `failed` + a Twilio code → carrier. `blocked` → consent. `skipped` → no provider configured. `duplicate` → the idempotency ledger correctly refused a double-send. Then **call the customer**; that is what the shop does anyway. |
 
 ### Things that are NOT emergencies
+
 - **`skipped` everywhere.** No third-party keys are configured. Working as designed.
 - **`degraded` on `/api/ready`.** Email/SMS/reviews are not configured. The site is fine.
 - **`facebook:app-review-required`.** Expected until App Review is granted.
@@ -820,6 +882,7 @@ Then, by symptom:
   on purpose. Reconcile from Resend's own log.
 
 ### Things that ARE emergencies
+
 - **`pii.passthrough_in_production` in the logs.** Customer PII is being stored in
   cleartext. Set `PII_ENCRYPTION_KEY`, then plan a one-off re-encrypt of the `Lead`
   table.

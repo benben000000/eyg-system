@@ -138,18 +138,22 @@ again.
 - ☐ **Every `TODO-VERIFY` flag next to the phone removed**
 - ☐ **`LINKS.call` is derived from `phoneE164`**, not a duplicated literal
 - ☐ **Searched the whole repo** for the placeholder:
+
   ```bash
   grep -rn '639000000000\|000-000-0000\|000 000 0000' src/ content/
   ```
+
 - ☐ **`node scripts/predeploy-check.mjs` passes with no
   `--allow-placeholders`**
 - ☐ **`node scripts/generate-og.mjs` re-run**
 - ☐ **Live site verified:**
+
   ```bash
   curl -s https://eygtireautocare.ph | grep -o 'tel:[^"]*'
   curl -s https://eygtireautocare.ph/contact | grep -o 'tel:[^"]*'
   curl -s https://eygtireautocare.ph | grep -o 'wa\.me/[0-9]*'
   ```
+
 - ☐ **📱 Tapped the link on a real phone and it rang the shop**
   - A number that renders correctly and rings a dead SIM is worse than one that
     renders wrong, because nobody thinks to check
@@ -191,7 +195,7 @@ customer who drove 1.5 hours to Balanga.
 
 ## 8. 🔴 Unverified claims removed
 
-The orchestrator brief: *do not ship a claim the owner has not signed off on.*
+The orchestrator brief: _do not ship a claim the owner has not signed off on._
 
 - ☐ **`trust.ratingValue`** — currently **4.9, unverified**
   - If the owner has not confirmed a rating, set it to `0` and render no stars
@@ -248,23 +252,29 @@ For a local tyre shop this is worth more than the website. It is free.
 ## 11. SEO
 
 - ☐ **`robots.txt` is correct**
+
   ```bash
   curl -s https://eygtireautocare.ph/robots.txt
   ```
+
   - `/admin`, `/api/` disallowed
   - `Sitemap: https://eygtireautocare.ph/sitemap.xml` present
   - **Not** `Disallow: /` — that removes the shop from Google entirely
 - ☐ **`sitemap.xml` returns 200 and lists the real pages**
+
   ```bash
   curl -s https://eygtireautocare.ph/sitemap.xml | grep -c '<url>'
   ```
+
 - ☐ **`sitemap.xml` submitted** to Google Search Console
 - ☐ **Google Search Console verified** — and the domain property, not only the
   URL-prefix property
 - ☐ **Canonical tag on every page** points at the production origin
+
   ```bash
   curl -s https://eygtireautocare.ph | grep -o '<link rel="canonical"[^>]*>'
   ```
+
 - ☐ **`NEXT_PUBLIC_SITE_URL` is `https://eygtireautocare.ph`** — no trailing
   slash, no localhost, no staging
 - ☐ **Title and meta description on every page**, unique
@@ -302,21 +312,27 @@ complete until the drill has actually been run.
   - Off-the-hour (`02:17`), `TZ=Asia/Manila`
   - See [BACKUP-AND-RECOVERY.md](BACKUP-AND-RECOVERY.md) §4.2
 - ☐ **Backups landing in the configured directory**
+
   ```bash
   node scripts/db-backup.mjs --list
   ```
+
 - ☐ **Backups are encrypted** — `.dump.enc` with an AES-256-GCM header
 - ☐ **Every dump passes its checksum**
+
   ```bash
   node scripts/db-backup.mjs --verify
   ```
+
 - ☐ **Off-site copy exists and is verified** — not just local
 - ☐ **The passphrase is in a physical envelope** with the registration papers
 - ☐ **🔴 THE RESTORE DRILL WAS RUN AND PASSED**
+
   ```bash
   node scripts/db-restore.mjs --latest \
     --target=postgresql://…@localhost:5432/eyg_restore_drill --cleanup
   ```
+
   - Bookings count plausible · tables ≥ 10 · newest booking date correct
   - **Result recorded:**
     `Drill ____-__-__ — PASS — N bookings, N tables, Ns`
@@ -467,16 +483,20 @@ first booking works and the fourth reveals the rate limit.
 ## 19. Security headers
 
 - ☐ **Every header present** — see [SECURITY-HEADERS.md](SECURITY-HEADERS.md) §1
+
   ```bash
   curl -sI https://eygtireautocare.ph
   ```
+
 - ☐ **CSP present with a nonce that rotates per response**
+
   ```bash
   for i in 1 2; do
     curl -sI https://eygtireautocare.ph | grep -o "nonce-[a-zA-Z0-9+/=]*" | head -1
   done
   # Two DIFFERENT values.
   ```
+
 - ☐ **Zero CSP violations in the browser console** on every page
 - ☐ **CSP violation reporting configured** (`report-uri` / `report-to`)
 - ☐ **`form-action 'self'`** in the CSP — protects the booking form from a
@@ -492,9 +512,11 @@ first booking works and the fourth reveals the rate limit.
 - ☐ **`Vercel` production alias points at `eygtireautocare.ph`**
 - ☐ **`node scripts/smoke-test.mjs --base-url=https://eygtireautocare.ph` passes**
 - ☐ **A rollback has been tested** — not just read about
+
   ```bash
   npx vercel rollback --yes && node scripts/smoke-test.mjs --base-url=…
   ```
+
   **An untested rollback is a hope, not a plan.**
 - ☐ **CI block on `main`** — someone proved they cannot push straight to
   production
@@ -563,22 +585,26 @@ grep -rn 'TODO-VERIFY\|639000000000' src/   # must be empty
 In this order. Not on a Friday afternoon.
 
 **T−1 day**
+
 - [ ] All boxes ticked, waivers written down
 - [ ] Announce to the team: "tomorrow, 9am, we go live"
 - [ ] The Facebook page has a post drafted but not scheduled
 
 **T−30 min**
+
 - [ ] `node scripts/smoke-test.mjs --base-url=https://eygtireautocare.ph --retries=3`
 - [ ] Uptime monitor reporting **green**
 - [ ] The fallback card is **at the counter**, not in a drawer
 - [ ] The owner has their phone charged
 
 **T+0 — go live**
+
 - [ ] The merge to `main`
 - [ ] Watch the deploy workflow
 - [ ] Watch the first 10 real requests in the logs
 
 **T+1 hour**
+
 - [ ] Smoke test again
 - [ ] Confirm the first real booking arrives, by SMS
 - [ ] Post on Facebook:
@@ -589,11 +615,13 @@ In this order. Not on a Friday afternoon.
   down — this is the only launch metric that matters
 
 **T+1 day**
+
 - [ ] `node scripts/db-backup.mjs --list` — confirm the first production backup
 - [ ] Sentry: zero errors
 - [ ] **Tell the team what to watch**
 
 **T+1 week**
+
 - [ ] Read every review and reply
 - [ ] Compare bookings to the same week before. **If bookings have not moved,
   the website is not doing its job** and the cheapest fix is usually

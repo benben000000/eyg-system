@@ -317,7 +317,7 @@ These two multipliers are placeholders chosen to be obviously round and obviousl
 **The owner replaces them with the real landed-cost calculation before any campaign ships.**
 The formula is the deliverable; the multiplier is a starting point.
 
-### 4.2 Three gates, in order. Every one is hard.
+### 4.2 Three gates, in order. Every one is hard
 
 | Gate | Test | Result if failed |
 | --- | --- | --- |

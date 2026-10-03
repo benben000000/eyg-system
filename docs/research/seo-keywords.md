@@ -6,7 +6,7 @@
 
 ## 0. Read this first — the honest state of keyword data
 
-> ### 🚨 I have NO keyword volume data. None. Not one number.
+> ### 🚨 I have NO keyword volume data. None. Not one number
 >
 > I have **no access to Google Keyword Planner, Ahrefs, Semrush, Keywordtool.io, or
 > Google Trends** from this environment, and the search engines that were reachable
@@ -202,7 +202,7 @@ against the rules below.
 
 - **Head:** `PMS Balanga City` · **VOLUME: UNVERIFIED**
 - **Also target:** `PMS Bataan`, `preventive maintenance service Balanga`, `car PMS
-  Bataan`, `PMS price Philippines`, ` PMS Balanga`, ` PMS near me`,
+  Bataan`, `PMS price Philippines`, `PMS Balanga`, `PMS near me`,
   `kay PMS ng sasakyan`, `pambuntit na pag-aalaga ng sasakyan`
 - **Intent:** Commercial with a **price-questions sub-intent.** PMS buyers in the
   Philippines research hard before booking because they fear being upsold. The single
@@ -457,7 +457,7 @@ against the rules below.
 - **Also target:** `underchassis cleaning Balanga`, `underchassis repair Bataan`,
   `undercarriage maintenance Bataan`, `chassis repair Balanga`
 - **Intent:** Commercial. **Lower volume than undercoating but much closer to verified
-  ground** — *"Underchassis Maintenance and Repair"** **is** service #4 on the shop's
+  ground** — *"Underchassis Maintenance and Repair"****is** service #4 on the shop's
   own list.* This is the honest version of Cluster F.
 - **Target URL:** `/services`
 - **Title (59 chars):** `Underchassis Maintenance & Repair in Balanga City | EYG` *(55)*
@@ -485,7 +485,7 @@ against the rules below.
   - `paano magpaganti ng gulay` · `gulay na umaaano` · `bakit umaaano ang gulay`
   - `pano magdagdag ng langis` · `pano magpalit ng gulay` · `pano mag-align ng gulay`
   - `pano magbasa ng tire size` · `ano ibig sabihin ng tire size`
-  - `kailan dapat mag-PMS` · ` PMS ng sasakyan`
+  - `kailan dapat mag-PMS` · `PMS ng sasakyan`
   - `masyado na ang gulay ko` · `gumagalit ang gulay`
   - `nasa loob ng gulay ko may tubig` (slow leak)
   - `wala nang braso ng preno` · `masyadong mahina ang preno`

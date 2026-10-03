@@ -10,6 +10,7 @@
 ## 0. The recommendation, up front
 
 > ### ✅ **Yes — publish a tyre and fitting catalogue. No — publish a live parts catalogue
+>
 > with stock numbers.**
 >
 > **Publish:** size, brand, pattern, honest price, and a **three-state** availability
@@ -238,6 +239,7 @@ Made 2023. Older stock, priced lower — not worse. We show you the DOT code bef
 ### 5.1 The recommendation
 
 > ### ✅ **Build it. As "enter the size you can see on your tyre" — *not* as a
+>
 > make/model/year vehicle selector.**
 
 **Not a rejection of the finder. A specific design of it.**

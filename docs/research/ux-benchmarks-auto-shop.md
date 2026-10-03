@@ -145,6 +145,7 @@ an opinion: the incumbent experience is a name, an address, and a phone number.*
 must not repeat:**
 
 > ### 🔴 THE CENTRAL ANTI-PATTERN OF THIS DOCUMENT
+>
 > **A location field that contradicts the address in the same record is the most
 > damaging single defect a local-business site can have — and it is invisible to everyone
 > inside the business.**

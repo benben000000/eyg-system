@@ -1,4 +1,5 @@
 # PHILIPPINE RECORD-KEEPING, WARRANTY AND CONSUMER LAW FOR STOCK
+
 ### A1 research · compiled 2026-10-03 · all checks performed 2026-10-03 (Asia/Manila)
 
 ---
@@ -251,7 +252,7 @@ penalty of revocation of business permit and license.**"*
 
 ## 4. Warranty — the statute, verbatim
 
-### 4.1 🔴 Article 71 — the 90-day service guarantee. This is the big one.
+### 4.1 🔴 Article 71 — the 90-day service guarantee. This is the big one
 
 ✅ **RA 7394 Article 71**, verbatim, in full:
 
@@ -364,6 +365,7 @@ inventory build and for A4's booking integration.**
 > demanded of the customer.**
 >
 > Three operational consequences:
+>
 > 1. ✅ This **corroborates Amaron's own first-party guidance** ("keep the Warranty
 >    Card and a copy of the sales receipt", `amaron-ph.com/tips-for-buying-batteries`).
 >    Statute and manufacturer agree.

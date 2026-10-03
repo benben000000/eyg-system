@@ -337,6 +337,7 @@ analytics (the click fires perfectly), and it is the default state of the config
 right now.
 
 **Check:**
+
 1. `BUSINESS.phoneE164` / `phoneDisplay` / `whatsappNumber` in `src/config/site.ts` — do
    the `TODO-VERIFY` flags still exist? **If yes, this is the answer. Stop here.**
 2. Compare `BUSINESS.phoneE164` digit-for-digit against the Google Business Profile and
@@ -365,6 +366,7 @@ or the button moved below the fold because the page got taller, taps land on the
 element. `FC-1` and `FC-9` exist because this failure mode is easy to ship by accident.
 
 **Check:**
+
 1. Open `/` at **360 × 640** and `/contact` at 360 × 640, on a real device. Tap the
    exact centre of `Call Shop Now`. Repeat on `/services`, `/deals`, `/gallery`, `/about`,
    `/book` and a 404 page. Nine manual taps take 60 seconds and settle it.
@@ -380,7 +382,7 @@ element. `FC-1` and `FC-9` exist because this failure mode is easy to ship by ac
 6. If a third-party widget was added (a chat bubble, a pixel that injects a div), that is
    the cause. `MOBILE-FIRST-SPEC.md` §4.1 bans floating widgets for exactly this reason.
 7. Confirm `barMode()` still returns the expected value on every route after whatever
-   changed (`CTA-MAP.md` §5` matrix`).
+   changed (`CTA-MAP.md` §5`matrix`).
 
 **Fix:** reinstate FC-1, remove the offending element, re-measure. Log it as
 `error_shown{reason: "click_intercepted"}` if you instrument an
@@ -395,6 +397,7 @@ More traffic on a heavier page converts worse even when nothing is broken. The b
 cause on this list that is invisible in analytics.
 
 **Check:**
+
 1. Compare p75 **LCP / INP / CLS** for the two weeks, split by `device: "mobile"`.
    Compare the impression-rise week to the week before, not to last quarter.
 2. Find the LCP element for the top 3 landing routes. If it is now an **image** rather
@@ -426,6 +429,7 @@ bookings stay flat — which reads as "calls are down" on a percentage chart and
 site problem at all.
 
 **Check:**
+
 1. Search Console → Queries, filtered to the impression-rise window. Compute the share of
    impressions on **branded** terms (`eyg`, `eyg tire`) vs **non-branded** (`tire shop
    balanga`, `pms bataan`, `wheel alignment near me`). A branded share of 70 %+ means
@@ -458,6 +462,7 @@ customer leaves quietly. It shows up as "they read the page and called nobody", 
 indistinguishable from a layout problem in a funnel report.
 
 **Check:**
+
 1. `error_shown{code: "NOT_FOUND", reason: "empty_reviews" | "empty_gallery" |
    "empty_promos"}`. A rising count means a trust section is rendering empty. It should
    not be rendering at all (`ERROR-AND-EDGE-STATES.md` §3, E1a/E2a/E3).
@@ -494,6 +499,7 @@ banner, or a promo interstitial. Or the availability API started returning empty
 left in the table and closed the calendar for a fortnight.
 
 **Check:**
+
 1. Diff `booking_step_completed` by step, week over week. **A change in the drop-off at
    exactly one step is the signature of a UX change.** If step 2 → 3 conversion fell 20
    points, something happened in step 2 or 3.

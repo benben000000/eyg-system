@@ -26,6 +26,12 @@
  */
 
 import { BUSINESS, LINKS, SITE, TIMEZONE } from "@/config/site";
+// TYPE-only import. The rule forbids inline `typeof import("nodemailer")`
+// annotations, and the fix has to preserve the property that makes the dynamic
+// import below worthwhile: `import type` is fully erased, so the module is still
+// only loaded when an SMTP send actually happens. A value import here would
+// defeat that and pull nodemailer into every boot.
+import type * as Nodemailer from "nodemailer";
 import { log } from "@/lib/logger";
 import { withDb } from "./db";
 import { emailConfig } from "./env";
@@ -119,8 +125,11 @@ interface ResendLike {
   emails: { send(payload: Record<string, unknown>): Promise<{ data?: { id?: string } | null; error?: unknown }> };
 }
 
+/** The shape of the lazily-loaded `nodemailer` module. */
+type NodemailerModule = typeof Nodemailer;
+
 let resendClient: ResendLike | null | undefined;
-let nodemailerModule: typeof import("nodemailer") | null | undefined;
+let nodemailerModule: NodemailerModule | null | undefined;
 
 /**
  * Lazily imports the provider. Both are dynamic so that a deployment without
@@ -144,7 +153,7 @@ async function getResend(): Promise<ResendLike | null> {
   return resendClient;
 }
 
-async function getNodemailer(): Promise<typeof import("nodemailer") | null> {
+async function getNodemailer(): Promise<NodemailerModule | null> {
   if (nodemailerModule !== undefined) return nodemailerModule;
   const cfg = emailConfig();
   if (!cfg.smtp) {

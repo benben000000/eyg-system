@@ -323,6 +323,7 @@ honest, and much better than inventing scarcity.
 
 **Step 3 — Hold the loyalty, drop the discount.**
 When the promo ends, the regular keeps:
+
 - The relationship offer (referral, birthday) — these never expire.
 - The free services (pressure checks, rotation on a PMS).
 - The *price*, in the sense that the à-la-carte rate was always the real rate.

@@ -33,7 +33,9 @@ proves the current behaviour is wrong.
 
 **Reproduction**
 ```
+
 the smallest command that shows it
+
 ```
 
 **Business impact** — who loses what. One sentence. "A customer is quoted ₱1,530
@@ -45,6 +47,7 @@ and charged ₱2,900" beats "pricing inconsistency".
 ```
 
 **Verification** — which test turns green.
+
 ```
 
 Severity is about *consequence*, not effort:
@@ -83,8 +86,10 @@ date forces `isOpen: false`, with the holiday's name in the detail line.
 
 **Reproduction**
 ```
+
 Add: Holiday { name: "Christmas Day", date: 2026-12-25, isClosed: true }
 Open / on 25 December at 10:00 Manila → the badge reads "Open now".
+
 ```
 
 **Business impact.** A customer drives 1.5 h from Manila to a closed door on a
@@ -167,6 +172,7 @@ prevent, defeated by a missing `?`.
 formatPhPhone("09171234567")  // → "+63 9171 234 567"   ✗
                               // → should be "+63 917 123 4567"
 ```
+
 `e164.slice(4)` keeps the leading `9` in the first group, then formats 3-3-3.
 
 **Business impact.** This is the string the front desk reads back to a customer
@@ -175,6 +181,7 @@ noisy line in a shop. `+63 9171 234 567` is 3+4+3 digits and gets transcribed
 wrong.
 
 **Fix** (orchestrator-owned, so this is a *request*, not an edit):
+
 ```ts
 const national = e164.slice(3);            // "9171234567"
 return `+63 ${national.slice(0,3)} ${national.slice(3,6)} ${national.slice(6)}`;
@@ -194,10 +201,12 @@ return `+63 ${national.slice(0,3)} ${national.slice(3,6)} ${national.slice(6)}`;
 | **Failing test** | `tests/unit/quote-math.test.ts` → "must contribute a real band, never ₱0 (DEF-005)" |
 
 **What happens.**
+
 ```ts
 const unitMin = svc.priceMin ?? 0;
 const unitMax = svc.priceMax ?? unitMin;   // 0 when priceMax is null too
 ```
+
 A `CALL_FOR_PRICE` service (priceMin and priceMax both null) contributes
 **₱0 – ₱0** to the itemised estimate, with `isVariable: true` on the line.
 
@@ -225,11 +234,13 @@ requires "a wide band with `isVariable`", not a zero.
 
 **What happens.** One peso amount is computed from the floor and subtracted from
 **both** bounds:
+
 ```ts
 const discount  = Math.round(subtotalMin * promo.percentOff / 100);
 const min = subtotalMin - discount;
 const max = subtotalMax - discount;     // ← flat subtraction
 ```
+
 15% off a ₱1,800–₱3,400 basket yields **₱1,530 – ₱3,070**, when the true 15%-off
 band is **₱1,530 – ₱2,890**. The ceiling is ₱180 higher than the shop intends to
 honour.
@@ -239,11 +250,13 @@ reads the top of the band as a ceiling has been quoted a number the shop does no
 intend to honour. At the counter that is a dispute, or a DTI complaint.
 
 **Fix.**
+
 ```ts
 const factor = 1 - promo.percentOff / 100;
 const min = Math.max(0, Math.round(subtotalMin * factor));
 const max = Math.max(min, Math.round(subtotalMax * factor));
 ```
+
 and compute `savings.amount` as `subtotalMin - min` so the three numbers agree.
 
 ---
@@ -260,10 +273,12 @@ and compute `savings.amount` as `subtotalMin - min` so the three numbers agree.
 | **Failing test** | `tests/unit/quote-math.test.ts` → "honours every promo kind the seed actually uses" |
 
 **What happens.** `evaluatePromo` only reads arithmetic from two kinds:
+
 ```ts
 const percentOff = promo.kind === "PERCENT_OFF" ? … : 0;
 const fixedOff   = promo.kind === "FIXED_OFF"   ? … : 0;
 ```
+
 Cross-referencing `src/content/marketing/promotions.ts`:
 
 | Code | Kind | Carries | `evaluatePromo` says |
@@ -323,10 +338,12 @@ applied to every amount before it reaches the DTO.
 | **Failing test** | `tests/unit/sms-length.test.ts` → "every template is GSM-7 encodable" |
 
 **What happens.**
+
 ```
 "{{sender}}: {{title}} — {{value}} until {{end}}. "
                  ↑ U+2014 EM DASH
 ```
+
 U+2014 is **not** in the GSM 03.38 basic character set. One character downgrades
 the whole message to UCS-2, which means a 1-segment promo blurb is billed as
 **3 segments** (70/70/57) and a GSM-unaware handset renders `?` instead of the
@@ -384,11 +401,13 @@ rendering, naming the token.
 module's own documented worst case — sender + a real reference + a real date + a
 real time + three real service names + "+N more" — it renders **169 characters**,
 9 over the limit:
+
 ```
 EYG Tire: booked. Ref EYG-7F3K9A on Wed 11 Mar, 9:00 AM. Brake Pad Replacement
 (front axle), Tyre Balance, PMS A + 5 more. EGSA Fourlanes, Tuyo. Reply CALL
 to change it.
 ```
+
 `assertSmsFits` therefore **throws on every booking with three ordinary
 services**, so the confirmation SMS is never sent.
 
@@ -420,6 +439,7 @@ fix: **budget the template against a realistic payload, not a placeholder.**
 | **OWASP** | A01:2021 Broken Access Control / A05:2021 Security Misconfiguration |
 
 **What happens.**
+
 ```ts
 const allowed = new Set<string>([
   env.siteUrl,
@@ -428,6 +448,7 @@ const allowed = new Set<string>([
   `http://${host ?? ""}`,          // ← plaintext http is trusted in production
 ]);
 ```
+
 `host` comes from the request's `Host` header. An attacker who can point a
 hostname at the origin sends `Host: evil.example` + `Origin: https://evil.example`
 and the check **passes** (confirmed: the middleware returns 200, not 403).
@@ -446,6 +467,7 @@ never approved. Combined with a spam run, that fills the front desk's board with
 bookings nobody made.
 
 **Fix.**
+
 ```ts
 const allowed = new Set<string>([env.siteUrl]);
 if (!env.isProduction) {

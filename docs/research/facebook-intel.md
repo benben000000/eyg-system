@@ -216,6 +216,7 @@ Post `1234870912037112`, **dated Tuesday, 9 December 2025, 9:27 PM** (DDG crawl 
 Engagement: 3 comments, 3 shares. Album: `a.730304879160387`.
 
 **What this tells us:**
+
 - The Auto Care arm **opened 9 December 2025** — 7 weeks after the page was created.
 - It was announced **on the older EYG TIRE TRADING page**, and directs people to
   **Messenger "EYG TIRE Trading"**. So the two pages are deliberately cross-linked and
@@ -290,6 +291,7 @@ job photos — do not use them as gallery "work" shots.
 
 **Toyota Hilux FX — steering rack + alignment** (post `122132407335080627`, 2026-07-02).
 Album `a.122111105361080627`.
+
 ```
 734768117_122132407401080627_947936334751832469_n.jpg   <- lead image, 2048x1536
 732747593_122132407395080627_1925080151012567424_n.jpg
@@ -300,6 +302,7 @@ Album `a.122111105361080627`.
 
 **Hyundai Staria — Amaron Jade AGM DIN80 install** (post `122135103615080627`, 2026-08-07).
 Album `a.122111105361080627`.
+
 ```
 767268718_122135103669080627_5572051908911529429_n.jpg   <- lead image, 2048x1536
 766952580_122135103753080627_3753880750145975156_n.jpg
@@ -310,6 +313,7 @@ Album `a.122111105361080627`.
 
 **PETRONAS engine oil range** (post `122127537963080627`, 2026-05-02).
 Album `a.122111105361080627`.
+
 ```
 686462710_122127538017080627_8189526890140414070_n.jpg   <- lead image, 2048x1536
 686070315_122127538077080627_7415568136731696467_n.jpg
@@ -320,12 +324,14 @@ Album `a.122111105361080627`.
 
 **Opening announcement creative** (post `1234870912037112`, 2025-12-09). Album
 `a.730304879160387`.
+
 ```
 596801418_1234870622037141_9204331299475981853_n.jpg   <- 1540x679 banner
 ```
 
 **Tyre stock photos — EYG TIRE TRADING** (Calero St. business). Album
 `a.404664205057791`. *Useful for `/deals`, not for `/gallery`.*
+
 ```
 485800103_1028666142657591_6097733836029011757_n.jpg   <- Radar Renegade 265/65R17, 960x1280
 485806576_1028666192657586_8282907877022192827_n.jpg
@@ -337,6 +343,7 @@ Album `a.122111105361080627`.
 
 **Additional images found on the two hiring posts** (usable for an `/about` or team strip,
 subject to consent — see `legal-compliance-ph.md` §7):
+
 ```
 604859068_1247552137435656_2232989414069290390_n.jpg   <- Senior Mechanic ad, 1024x1536
 509437523_1095137882677083_7557696427859833066_n.jpg   <- Urgent Hiring ad, 528x525
@@ -354,6 +361,7 @@ website. Two specific risks:
    Act the shop is the controller of these images.
 
 **Required before any of these go live on `/gallery`:**
+
 - [ ] Crop or blur **all** licence plates (or crop below the bumper line).
 - [ ] Blur faces, or get a written, specific, revocable release from the owner.
 - [ ] **Do not** put customer names next to photos. Name+photo+car model is a dossier.
@@ -508,7 +516,7 @@ Every fact above traces to one of these. Checked **2026-10-02**.
 | S7 | `…/100065426441998%2Fposts%2F899735982217275…` (Radar) | Calero St. address + landmark; Mon–Sat 8–5; `foundingDate` **2021-03-18**; 575 followers | Facebook, first-party |
 | S8 | `…/100065426441998%2Fposts%2F891051626419044…` (Deestone) | Confirms Calero St. address + Mon–Sat 8–5 | Facebook, first-party |
 | S9 | `…/100065426441998%2Fposts%2F1095138446010360` and `/1247552900768913` (`og:description`) | **+63 962 717 6894**; EGSA Fourlanes; mechanic vacancies 2025-06-19 / 2025-12-26 | Facebook, first-party |
-| S10 | `https://www.balanga.com.ph/business-directory/automobile-services-and-transportation/eyg-tire-trading` | **09985323508**; **lgguillermo3@gmail.com**; Calero St., Ibayo; `AutomotiveBusiness` JSON-LD; *"sourced from official business tax records"*, *"in partnership with the City Government of Balanga"* | City of Balanga + Yoonet — official |
+| S10 | `https://www.balanga.com.ph/business-directory/automobile-services-and-transportation/eyg-tire-trading` | **09985323508**; **<lgguillermo3@gmail.com>**; Calero St., Ibayo; `AutomotiveBusiness` JSON-LD; *"sourced from official business tax records"*, *"in partnership with the City Government of Balanga"* | City of Balanga + Yoonet — official |
 | S11 | `https://www.michelin.com.ph/auto/dealer-locator/batangas/yfvejbu-eyg-tire-trading` | EYG TIRE TRADING as a **"4W tire dealer"**; `#183 CALERO ST., IBAYO BALANGA CITY BATAAN 2100`; `addressLocality: BATANGAS`; `geo 13.75647, 121.05831`; page updated 2026-07-23 | Brand, first-party |
 | S12 | `https://www.bfgoodrich.com.ph/auto/dealer-locator/batangas/yfvejbu-eyg-tire-trading` | Identical record; page updated 2026-01-19 | Brand, first-party |
 | S13 | `https://www.michelin.com.ph/auto/dealer-locator/bataan` | Bataan index exists (title only) — **EYG absent from it** | Brand, first-party |
@@ -526,6 +534,7 @@ Official Gazette (403), built-in `websearch` (0 results on 4 queries), PRC websi
 ## 6. One-page handoff
 
 **Safe to publish today (all CONFIRMED):**
+
 - Mon–Sat 08:00–17:00, Sunday closed
 - EGSA Fourlanes, Tuyo, Balanga City, Bataan — as the Auto Care service centre
 - The 10-item service list, verbatim, in the page's own order
@@ -533,6 +542,7 @@ Official Gazette (403), built-in `websearch` (0 results on 4 queries), PRC websi
 - Brand-colour yellow/black heart motif `🖤💛 … 💛🖤`
 
 **Safe to publish after one phone call to the owner:**
+
 - Phone number (→ `+63 962 717 6894`), WhatsApp number, email (→ `lgguillermo3@gmail.com`)
 - Legal name and whether it's a Corporation
 - All prices

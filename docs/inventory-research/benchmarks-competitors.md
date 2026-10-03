@@ -1,4 +1,5 @@
 # BENCHMARKS & COMPETITORS — inventory systems and Philippine tyre shops
+
 ### A1 research · compiled 2026-10-03 · all checks performed 2026-10-03 (Asia/Manila)
 
 ---
@@ -121,9 +122,11 @@ integration platform. This is the benchmark that knows what a tyre actually is.
 The size search takes the size **structurally**, not as a string:
 
 > *"You can make any kind of search, for example using search By Size method"*
+>
 > ```json
 > "size": { "size_part_1": "205", "size_part_2": "55", "size_part_3": "16" }
 > ```
+>
 > *"1. `size_part_1` 2. `size_part_2` 3. `size_part_3` — Or it can be just `size`
 > param that accept raw size."*
 
@@ -164,6 +167,7 @@ all read 2026-10-03.
 
 > *"**Tyres – Tyre & wheel data.** The Tyres module provides comprehensive
 > information on tyres and wheels including:
+>
 > - Display of **permissible wheel/tyre combinations according to EC type approval**
 > - Possible wheel/tyre combinations for **front axle/rear axle**
 > - **Seasonal restrictions** for summer and winter tyres
@@ -270,6 +274,7 @@ vehicle with 195/75R16C front and dual rears — TecDoc has to represent all of 
    compare the characteristics of the alternatives shown in the list."* It does
    not silently substitute. **This is the correct behaviour and it is exactly
    what RA 7394 Art. 69(b) ✅ demands — material supplied must be *"reasonably fit
+
 > for that purpose"*, and only the customer can say if an alternative is.**
 
 ### 4.3 🔴🔴 THE FAILURE MODE — the most valuable thing in this document
@@ -504,7 +509,7 @@ and found one additional fact set via a third-party business aggregator
 has a stock page, a price list, or a size finder. The closest any competitor gets
 to inventory transparency is a Facebook photo of a tyre they sold.
 
-> ### This is the strategic fact the inventory build rests on.
+> ### This is the strategic fact the inventory build rests on
 >
 > **Every capability in this project — availability, honest shortfall, DOT-aware
 > clearance, a real reorder loop — is invisible in the local market.** There is no
@@ -569,6 +574,7 @@ Federal dealer, which we are not"* — is exactly the wrong move. Say what EYG
 | B18 | `tyrepress.com/2022/01/continental-first-tyre-maker-in-tecdoc-catalogue/` — Continental et al. first tyre brands in TecDoc; PRICAT → TecDoc conversion | Trade press | ✅ 2026-10-03 |
 
 **What I could not inspect and did not fake:**
+
 1. **Autodoc's internal inventory system.** Not public. ❌
 2. **MotoParts.** Named in the brief. I did not find a *public* inventory
    operations page for a business of that name that I could attribute with

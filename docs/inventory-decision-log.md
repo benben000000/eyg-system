@@ -1,5 +1,6 @@
 # INVENTORY — ORCHESTRATOR DECISION LOG
-### The judgement calls, and why. Read this before changing anything in here.
+
+### The judgement calls, and why. Read this before changing anything in here
 
 Six agents built the inventory in parallel. Several of them found real holes in
 *my* work — the schema, the contract and the integration wiring — and this file
@@ -174,6 +175,7 @@ The backend agent seeded **28 generic placeholder SKUs** (`FLT-OIL-01`,
 catalogue** with researched retail anchors. Neither could see the other.
 
 Problems in the placeholder seed, per the research agent:
+
 - Two rows are mis-kinded (`OIL-BRAKE-500ML` and `OIL-COOLANT-1L` filed as `OIL`).
 - Several are consumed by **no confirmed service** (`OIL-ATF-1L`, `FLT-FUEL-01`,
   `FLT-CAB-01`, `CON-SILICONE-DASH`).

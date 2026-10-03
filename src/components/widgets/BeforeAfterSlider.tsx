@@ -27,6 +27,7 @@
  * ============================================================================
  */
 import { useCallback, useId, useRef, useState } from "react";
+import Image from "next/image";
 import { Columns2, MoveHorizontal } from "lucide-react";
 import { clamp, cn } from "@/lib/utils";
 import { usePrefersReducedMotion } from "@/hooks/useMediaQuery";
@@ -171,12 +172,21 @@ export default function BeforeAfterSlider({
         className="relative touch-pan-y select-none overflow-hidden rounded-card border border-border bg-surface-muted"
         style={{ aspectRatio: `${before.width} / ${before.height}` }}
       >
-        {/* BEFORE — the base layer, always fully painted. */}
-        <img
+        {/* BEFORE — the base layer, always fully painted.
+
+            `next/image`, not a raw <img>: these are Facebook-CDN originals served
+            at full resolution, and the rule about two layers is only worth
+            honouring if BOTH layers get the same treatment — a mismatch would put
+            the seam in a different place than the user's eye expects. Identical
+            width/height and an identical `sizes` keep them registered. */}
+        <Image
           src={before.src}
           alt={before.alt}
           width={before.width}
           height={before.height}
+          // The slider spans the content column on mobile and about half of it on
+          // a wide screen, so 100vw would fetch 2-3x the pixels actually painted.
+          sizes="(min-width: 1024px) 45vw, 100vw"
           decoding="async"
           loading="lazy"
           draggable={false}
@@ -189,11 +199,12 @@ export default function BeforeAfterSlider({
           style={{ clipPath: `inset(0 0 0 ${position}%)` }}
           aria-hidden="true"
         >
-          <img
+          <Image
             src={after.src}
             alt=""
             width={after.width}
             height={after.height}
+            sizes="(min-width: 1024px) 45vw, 100vw"
             decoding="async"
             loading="lazy"
             draggable={false}
@@ -274,11 +285,12 @@ function BeforeFigure({
         className="overflow-hidden rounded-card border border-border bg-surface-muted"
         style={{ aspectRatio: `${image.width} / ${image.height}` }}
       >
-        <img
+        <Image
           src={image.src}
           alt={image.alt}
           width={image.width}
           height={image.height}
+          sizes="(min-width: 1024px) 45vw, 100vw"
           decoding="async"
           loading="lazy"
           className="size-full object-cover"

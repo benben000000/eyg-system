@@ -181,6 +181,7 @@ a JS boundary and a hydration cost.
 ### 4. Defer it
 
 If the code is genuinely needed but not needed *now*:
+
 * `next/dynamic` with `ssr: false` for a below-the-fold widget (the lightbox
   viewer, the reviews carousel).
 * Move it to a Server Component and pass only the serialisable props.
@@ -207,6 +208,7 @@ embed needs an explicit height.
 ### 7. LCP specifically
 
 If LCP regressed with no code change, check in this order:
+
 1. Did an image lose `priority`?
 2. Did a third-party script get added to `<head>`?
 3. Did the hero become a client component?

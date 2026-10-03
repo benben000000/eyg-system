@@ -250,10 +250,10 @@ It runs the client-boundary guard, a typecheck, and the suite, and uploads
 
 A failing test is information, not an obstacle.
 
-* **The test is right and the code is wrong** — leave it failing, open a defect with
+- **The test is right and the code is wrong** — leave it failing, open a defect with
   a file and a line number, report it. That is the entire point of this role.
-* **The test is wrong** — fix the test and say so.
-* **Never** weaken an assertion to make a run green.
-* **The implementation does not exist yet** — `it.todo`, naming the export.
+- **The test is wrong** — fix the test and say so.
+- **Never** weaken an assertion to make a run green.
+- **The implementation does not exist yet** — `it.todo`, naming the export.
 
 See `docs/inventory-qa/DO-DONT.md` for the table form of the same rules.

@@ -1,5 +1,6 @@
 # EYG TIRE & AUTO CARE — ORCHESTRATOR BRIEF
-### The single source of truth. Every agent reads this first. Nobody deviates.
+
+### The single source of truth. Every agent reads this first. Nobody deviates
 
 ---
 
@@ -55,6 +56,7 @@ All tokens already live in `src/app/globals.css` under `@theme`.
 `text-muted-foreground`, etc.
 
 ### The three brand devices
+
 1. **Speed stripe** — the angled yellow bar (`.eyg-stripe`). Underlines H1s.
 2. **Hazard hatch** — 45° yellow/black diagonal (`.eyg-hazard`). Only for urgency:
    clearance, "closing soon", roadside.
@@ -100,6 +102,7 @@ viewport, always.** On mobile that is a persistent bottom bar.
 ## 5. Non-negotiables (the "don'ts")
 
 ### Never
+
 - ❌ Invent facts: phone numbers, prices, hours, brand partnerships, ratings,
   years in business, "certified", "licensed", "authorised dealer".
 - ❌ Fake reviews, invented customer names, stock photos presented as their work.
@@ -115,6 +118,7 @@ viewport, always.** On mobile that is a persistent bottom bar.
 - ❌ Trust badges for brands the shop is not actually authorised to sell.
 
 ### Always
+
 - ✅ Mobile-first, thumb-reachable, works on a ₱3,000 Android over 3G.
 - ✅ WCAG 2.2 AA: contrast ≥ 4.5:1, focus rings, landmarks, `aria-*`, alt text.
 - ✅ `prefers-reduced-motion` respected everywhere.
@@ -123,10 +127,10 @@ viewport, always.** On mobile that is a persistent bottom bar.
 - ✅ Types end-to-end. `strict`, `noUncheckedIndexedAccess` are on.
 - ✅ Server Components by default; `"use client"` only where interaction demands.
 - ✅ Copy in plain, respectful Taglish-friendly English. Short sentences.
-  Filipino automotive vocabulary where locals use it: * PMS, PMS A/B, wheel
+  Filipino automotive vocabulary where locals use it: *PMS, PMS A/B, wheel
   alignment, tire rotation, vulcanizing, undercoating, change oil, brake pad,
   shock absorbers, CVL/bushings, car aircon, roadside, breakdown, ayusin/check,
-  CVO (deferred down payment) *.
+  CVO (deferred down payment)*.
 - ✅ Every image has meaningful `alt` or `alt=""` if decorative.
 
 ---
@@ -174,6 +178,7 @@ and import from there. Never block waiting for another agent.
 ## 8. Report format
 
 Every agent ends with a report containing:
+
 1. **Shipped** — files created, one line each.
 2. **Contracts used** — the exact imports you relied on.
 3. **Requests for the orchestrator** — anything you could not do without editing

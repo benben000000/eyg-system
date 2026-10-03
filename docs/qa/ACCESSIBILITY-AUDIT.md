@@ -84,10 +84,12 @@ SC 2.4.7 Focus Visible fails outright, and SC 1.4.11 fails with it.
 
 **Fix** (orchestrator-owned — `globals.css` is in the "never edit" table, so this
 is a *request*):
+
 ```css
 --color-ring: var(--color-ink-950);   /* light theme */
 [data-theme="dark"] { --color-ring: var(--color-brand-500); }
 ```
+
 or, keeping yellow in light mode, use a two-tone ring (`outline: 3px solid
 var(--color-ink-950); box-shadow: 0 0 0 6px var(--color-brand-500)`) so it is
 visible on **both** surfaces.
@@ -101,7 +103,7 @@ visible on **both** surfaces.
 | **Severity** | Medium |
 
 `--color-border: #E3E3E6` on white is **1.24 : 1**; `--color-border-strong:
-#C7C7CD` is **1.65 : 1**. WCAG 2.2 SC 1.4.11 requires **3 : 1** for the
+# C7C7CD` is **1.65 : 1**. WCAG 2.2 SC 1.4.11 requires **3 : 1** for the
 boundary of an interactive control. A text input whose only boundary is
 `--color-border` is **not identifiable**.
 

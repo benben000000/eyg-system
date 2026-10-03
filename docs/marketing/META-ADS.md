@@ -25,6 +25,7 @@ local tyre shop, or 1–2 calls. **If the shop cannot serve those calls, the mon
 is better spent on a discount for the customers it already has.**
 
 **Start Meta Ads when all three of these are true:**
+
 1. GBP is complete, has 20+ reviews, and ranking for "tire shop Balanga".
 2. The bay is 60%+ occupied on a normal day (you have capacity to sell).
 3. There are real photos of the real bay.
@@ -56,6 +57,7 @@ radii are used. **Over-reaching on radius is the fastest way to pay for clicks
 from people 40 km away who will never come.**
 
 **Geo settings — non-negotiable:**
+
 - ✅ Location **Presence**: "People living in or regularly in your targeted
   locations"
 - ❌ **NOT** "Everyone in your targeted locations" — this reaches people on
@@ -65,6 +67,7 @@ from people 40 km away who will never come.**
 ### 2.2 Audience — three initial audiences
 
 **Audience A — COMMUTER CORRIDOR** (the best value in a Balanga market)
+
 - Ages 28–55
 - Balanga, Bataan + 40 km
 - Interest in: Toyota, Mitsubishi, Honda, Nissan (popular local brands),
@@ -72,6 +75,7 @@ from people 40 km away who will never come.**
 - Behaviour: engaged shoppers, "online shopping" buyers
 
 **Audience B — NEW / FIRST CAR OWNER** (highest LTV)
+
 - Ages 20–30
 - Balanga, Bataan + 40 km
 - Interests: driving school, cars, automotive, driver's licence
@@ -79,6 +83,7 @@ from people 40 km away who will never come.**
   once trusted
 
 **Audience C — FAMILY CAR** (best for PMS, alignment, tyres)
+
 - Ages 32–55
 - Balanga / Bataan + 40 km
 - Interests: family, SUV, Toyota Fortuner, Mitsubishi Xpander, Honda CR-V
@@ -111,6 +116,7 @@ word **"BUKAS 24/7"** ⚠️ *(only if genuinely true — see §6)* or **"ROADSI
 HELP"** with the phone number large.
 
 **Copy:**
+
 ```
 Kapa na sa Fourlanes?
 
@@ -142,6 +148,7 @@ most-price-insensitive call. One job pays for a year of ads.
 **Creative:** a car on the lift mid-PMS. **A real photo, not stock.**
 
 **Copy variant A (transparency-led):**
+
 ```
 Magkano ba talaga ang PMS?
 
@@ -156,6 +163,7 @@ Tingnan ang aming serbisyo at mag-book.
 ```
 
 **Copy variant B (convenience-led):**
+
 ```
 PMS na, at hindi mo na kailangan uminom ng kape habang naghihintay.
 
@@ -186,6 +194,7 @@ honest ad in this whole document** — it says "we have these" and it is literal
 verifiable.
 
 **Copy:**
+
 ```
 Tire na dapat i-check?
 
@@ -328,6 +337,7 @@ this market anyway, and it is impossible to get wrong.
 | "Are you a Toyota owner?" | *(Ask a question, don't assert)* "What year is your Toyota?" |
 
 **Targeting settings that must stay off:**
+
 - ❌ Detailed targeting → *Everyone* not *Custom Audience*
 - ❌ Special Ad Categories — **not required** here, do not set
 - ✅ Audience → Advantage+ audience (broad, no interest detail)

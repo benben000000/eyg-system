@@ -282,6 +282,7 @@ jobs:
         if: inputs.skip_migrations != true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: {{ secrets.DIRECT_URL }}
           BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
           set -euo pipefail
@@ -298,6 +299,7 @@ jobs:
         if: inputs.skip_migrations != true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: {{ secrets.DIRECT_URL }}
         run: |
           set -euo pipefail
           echo "::group::Migration status before"
@@ -375,6 +377,7 @@ jobs:
           set -euo pipefail
           docker exec eyg-deploy-db psql -U ci -d ci -c 'CREATE EXTENSION IF NOT EXISTS "pgcrypto";' || true
           DATABASE_URL="postgresql://ci:ci@127.0.0.1:5432/ci?schema=public" \
+          DIRECT_URL="postgresql://ci:ci@127.0.0.1:5432/ci?schema=public" \
             npx prisma migrate deploy 2>/dev/null || \
           DATABASE_URL="postgresql://ci:ci@127.0.0.1:5432/ci?schema=public" \
             npx prisma db push --skip-generate
@@ -385,6 +388,7 @@ jobs:
       - name: Run the container and smoke test it
         env:
           DATABASE_URL: postgresql://ci:ci@eyg-deploy-db:5432/ci?schema=public
+          DIRECT_URL: postgresql://ci:ci@eyg-deploy-db:5432/ci?schema=public
           AUTH_SECRET: preflight-stub-0000000000000000000000000000000000
           PII_ENCRYPTION_KEY: preflight-stub-0000000000000000000000000000000000
           WEBHOOK_SIGNING_SECRET: preflight-stub-not-a-secret
@@ -397,6 +401,7 @@ jobs:
             -p 3100:3000 \
             -e NODE_ENV=production -e PORT=3000 -e HOSTNAME=0.0.0.0 \
             -e DATABASE_URL="$DATABASE_URL" \
+            -e DIRECT_URL="$DATABASE_URL" \
             -e AUTH_SECRET="$AUTH_SECRET" \
             -e PII_ENCRYPTION_KEY="$PII_ENCRYPTION_KEY" \
             -e WEBHOOK_SIGNING_SECRET="$WEBHOOK_SIGNING_SECRET" \

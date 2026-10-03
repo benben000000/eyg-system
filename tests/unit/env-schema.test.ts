@@ -171,11 +171,15 @@ describe("env-schema — .env.example coverage", () => {
   it("only documents extra schema keys that the source explicitly calls out", () => {
     // Anything in the schema but not in .env.example is a documentation gap.
     // The only tolerated gaps are the ones src/lib/env.ts names in a comment.
-    expect(SCHEMA_KEYS_UNDOCUMENTED).toEqual([
-      "ADMIN_EMAIL",
-      "ADMIN_PASSWORD",
-      "RATE_LIMIT_READ_PER_MINUTE",
-    ]);
+    // Every key in the Zod schema is documented in .env.example.
+    //
+    // This assertion used to pin the exact list of gaps:
+    //   ["ADMIN_EMAIL", "ADMIN_PASSWORD", "RATE_LIMIT_READ_PER_MINUTE"]
+    // Those three have been documented, so the drift is closed and the only
+    // acceptable value is empty. Pinning the broken list would have made this
+    // test FAIL the moment someone fixed the gap properly, which is a test that
+    // rewards leaving a defect in place.
+    expect(SCHEMA_KEYS_UNDOCUMENTED).toEqual([]);
   });
 
   it("ships every SECRET as EMPTY in .env.example", () => {
@@ -194,6 +198,7 @@ describe("env-schema — .env.example coverage", () => {
       "RATE_LIMIT_BOOKING_PER_HOUR",
       "RATE_LIMIT_QUOTE_PER_HOUR",
       "RATE_LIMIT_LOGIN_PER_15MIN",
+        "RATE_LIMIT_READ_PER_MINUTE",
       "CAPTCHA_ENABLED",
       "CAPTCHA_TTL_SECONDS",
       "SMTP_PORT",

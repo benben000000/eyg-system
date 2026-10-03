@@ -1,5 +1,6 @@
 # INVENTORY — ORCHESTRATOR CONTRACT GAPS
-### Closed 2026-10-03. Raised by the funnel, marketing and booking-integration agents.
+
+### Closed 2026-10-03. Raised by the funnel, marketing and booking-integration agents
 
 Six gaps in orchestrator-owned files were found by agents building against them.
 All six are now closed. This file exists so nobody re-raises them, and so the

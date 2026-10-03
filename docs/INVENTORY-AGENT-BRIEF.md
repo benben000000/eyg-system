@@ -1,5 +1,6 @@
 # EYG INVENTORY SYSTEM — ORCHESTRATOR BRIEF
-### The contract for the parallel build. Read this first. Nobody deviates.
+
+### The contract for the parallel build. Read this first. Nobody deviates
 
 ---
 
@@ -74,6 +75,7 @@ orchestrator-owned file, **report it** — do not make it.
 Eight agents, parallel, exclusive file ownership.
 
 ### A1 · RESEARCH
+
 **Owns** `docs/inventory-research/`
 **DO** — research how Philippine tyre shops actually run stock: what a small
 Balanga shop really carries (SKUs, pack sizes, the tyre sizes that fit the local
@@ -88,6 +90,7 @@ source URL and a date, or it is labelled `SUGGESTED`. Do not write application
 code. Do not scrape behind logins or violate a ToS.
 
 ### A2 · INVENTORY BACKEND (core)
+
 **Owns** `src/lib/server/inventory/*`, `src/app/api/inventory/**`,
 `src/app/api/cron/*expiry*|*reorder*`
 **DO** — implement the atomic stock engine. The core is a single conditional
@@ -103,6 +106,7 @@ delete one. Never trust a client-supplied `available` or `onHandAfter`. Do not
 expose `costPrice` to any non-staff surface.
 
 ### A3 · FRONTEND (operator UI)
+
 **Owns** `src/app/inventory/**`, `src/components/inventory/**`
 **DO** — build the operator experience for someone standing at a shelf with a
 customer waiting. Product list with instant search across SKU/name/size/barcode,
@@ -117,6 +121,7 @@ quantity field accept a negative. Do not build a dashboard a mechanic cannot
 use with one hand on a phone. No placeholder data shipped as if real.
 
 ### A4 · BOOKING INTEGRATION
+
 **Owns** `src/lib/server/inventory/booking-hooks.ts`,
 `src/components/inventory/BookingPartsPanel.tsx`, `src/app/book` wiring
 **DO** — wire inventory into the existing booking lifecycle. On confirm: check
@@ -131,6 +136,7 @@ non-blocking part is short. Do not silently consume the wrong quantity. Do not
 change the customer-facing booking steps — this is additive.
 
 ### A5 · FUNNEL & UX DESIGNER
+
 **Owns** `docs/inventory-funnel/`
 **DO** — design the inventory's conversion and trust story. The customer-facing
 half is a **trust lever**: "we have your size in stock" is the single strongest
@@ -146,6 +152,7 @@ part, and never show a stock number to a customer that is a promise the shop
 cannot keep.
 
 ### A6 · MARKETING & MERCHANDISING
+
 **Owns** `docs/inventory-marketing/`, `src/content/inventory/`
 **DO** — turn real stock into revenue. Design the **tyre clearance** campaign
 driven by genuine aged stock (DOT-code-based, honest about age), the
@@ -159,6 +166,7 @@ margin, never advertise stock the system says is short, never run a countdown
 that resets.
 
 ### A7 · CI/CD & QA
+
 **Owns** `tests/inventory/**`, `.github/workflows/*` inventory additions,
 `docs/inventory-qa/`
 **DO** — write the tests that matter. The **concurrency suite is the single most
@@ -171,6 +179,7 @@ authorisation. Add the gate to CI. Write the release checklist for inventory.
 that passes because it asserts nothing. Report failing tests; do not delete them.
 
 ### A8 · SECURITY & INTEGRATION REVIEW
+
 **Owns** `docs/inventory-security/`, `tests/inventory/security/**`
 **DO** — be the adversary. Attack the stock engine specifically: can a
 double-tap double-consume? Can a staff account adjust stock without a reason? Can
@@ -191,6 +200,7 @@ still in force — especially "no invented facts", "no placeholder text shipped"
 and "every async surface has all four states".
 
 ### DO
+
 - **Refuse, never clamp.** A rejected move is a feature.
 - **Every write has a reason.** Required, non-empty, human-readable.
 - **Idempotency key on every stock mutation.** Networks retry; humans double-tap.
@@ -202,6 +212,7 @@ and "every async surface has all four states".
 - **Comment the *why*.** Especially the concurrency code.
 
 ### DON'T
+
 - ❌ Ship `TODO`, `Lorem`, `example.com`, dead `href="#"`, or fake stock data
   presented as real.
 - ❌ Put `"use client"` on a module that doesn't need it — see

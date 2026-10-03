@@ -13,6 +13,7 @@ owned by the orchestrator and are **not** restated as real values here.
   frontend agent calls the component. The **`cta_id`** column is the contract —
   analytics, QA and copy tests all key off the id, never off the class name.
 - **Variant**:
+
   | Variant | Style | Use for |
   | --- | --- | --- |
   | `emergency` | Racing-red plate, `shadow-cta`, hazard-hatch top edge, min 56 px tall | life-or-limb / stranded only |
@@ -20,6 +21,7 @@ owned by the orchestrator and are **not** restated as real values here.
   | `secondary` | `border border-ink-400` + `text-ink-950`, transparent bg | the alternate lane |
   | `tertiary` | `text-ink-950 underline decoration-2 underline-offset-4` | third choice, always a real link |
   | `ghost` | `text-ink-700` / `text-ink-300` on dark, no border | low-stakes navigation, footer |
+
 - **Fold** at 360 × 640 CSS px, the reference viewport for "above the fold" on this site.
 - **Priority**: `P0` the page fails its job without it · `P1` strong measured lift ·
   `P2` nice, ships last.

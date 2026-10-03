@@ -190,9 +190,11 @@ On a 360 × 640 phone held in one hand, the comfortable one-thumb arc covers rou
   that makes a customer book the wrong day.
 - A visually small icon gets its hit area with an invisible pseudo-element rather than by
   growing the icon:
+
   ```css
   .icon-hit::after { content: ""; position: absolute; inset: -8px; }
   ```
+
   The parent must be `position: relative`.
 - Checkbox and radio hit areas are expanded to 44 × 44 with padding, keeping the 20 px
   visual box.

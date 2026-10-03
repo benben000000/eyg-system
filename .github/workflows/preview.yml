@@ -143,6 +143,7 @@ jobs:
       # Scoped to this job. This URL resolves to the service container above and
       # to nothing else in the world.
       DATABASE_URL: postgresql://preview:preview@localhost:5432/preview?schema=public
+      DIRECT_URL: postgresql://preview:preview@localhost:5432/preview?schema=public
       NODE_ENV: production
       # Stubs — this build never talks to Twilio, Resend or Sentry.
       AUTH_SECRET: preview-stub-not-a-secret-0000000000000000000000

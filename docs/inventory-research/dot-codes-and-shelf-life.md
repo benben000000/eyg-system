@@ -1,4 +1,5 @@
 # DOT CODES, TYRE AGE, SHELF LIFE AND STALE STOCK
+
 ### A1 research · compiled 2026-10-03 · all checks performed 2026-10-03 (Asia/Manila)
 
 ---
@@ -173,7 +174,7 @@ Guide.pdf`), read 2026-10-03:
 
 > **🔴 The single most valuable, citable fact in this document:**
 >
-> ### An aged tyre sold today still gets a full 6-year warranty from today's sale date — provided it is under 10 years old at manufacture.
+> ### An aged tyre sold today still gets a full 6-year warranty from today's sale date — provided it is under 10 years old at manufacture
 >
 > Because ✅ Michelin's policy runs the 6 years from **"the date of purchase"**
 > (defined as *"the date on your sales invoice"*), and only caps the claim at

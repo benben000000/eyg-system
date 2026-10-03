@@ -1,4 +1,5 @@
 # STARTER CATALOGUE — 48 rows for a Balanga tyre shop
+
 ### A1 research · compiled 2026-10-03
 
 ---

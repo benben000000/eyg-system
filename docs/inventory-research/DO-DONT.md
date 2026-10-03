@@ -1,4 +1,5 @@
 # DO / DON'T — inventory UX for a Philippine tyre shop
+
 ### A1 research · compiled 2026-10-03
 
 ---
@@ -86,7 +87,7 @@ knows is false is a **deceptive act under RA 7394 Art. 50**.
 
 ---
 
-### 🔴 AP-03 — Never clamp a negative. Refuse.
+### 🔴 AP-03 — Never clamp a negative. Refuse
 
 **Evidence:** the brief's own invariant, and W1 — overselling is what actually
 happens in production.

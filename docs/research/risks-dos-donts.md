@@ -13,6 +13,7 @@
 > document, it is traceable.
 >
 > **The five hard rules, stated once:**
+>
 > 1. **Never state a fact the owner has not signed off.** Not a price, not a warranty, not
 >    a rating, not a year, not a brand, not a phone number.
 > 2. **Never manufacture urgency.** The shop has 308 followers. In a market of 138
@@ -124,6 +125,7 @@ community that can read its own history.**
 
 **The rule that replaces it.** Bounded capacity is *real* — but **never fabricate it.**
 Say the true thing:
+
 - ✅ "3 bays. Book the 8:30 AM slot." — real, useful, honest
 - ✅ "Open Monday to Saturday, 8 AM to 5 PM." — verified, and no local competitor says it
 - ✅ "We take 4 PMS jobs a morning. Book ahead." — if that is the true number

@@ -1,4 +1,5 @@
 # OPEN QUESTIONS — what the shop owner must confirm
+
 ### A1 research · compiled 2026-10-03 · **read this before ordering anything**
 
 ---
@@ -56,6 +57,7 @@ distributor and one invoice settles it.
 | One Motolite or Amaron invoice + the **core credit** per returned unit | 4 BATTERY rows |
 
 > 🔴 **Ask the tyre distributor four questions, not one:**
+>
 > 1. What is my cost on a `205/55R16` Michelin Energy XM2+, by the pair?
 > 2. What is my cost on a `205/55R16` Radar Dimax Sprint?
 > 3. **What is my rebate structure at end of quarter?**  ← the real margin
@@ -136,6 +138,7 @@ trading arm) are **both confirmed** — different phone numbers, different
 registrations (`facebook-intel.md`).
 
 > **Do you keep tyres at Calero and do the fitting at EGSA?**
+>
 > - **Yes** → you need a location dimension, and you need stock to *move* between
 >   locations. ✅ `StockMovementKind` already has `TRANSFER_IN` and
 >   `TRANSFER_OUT`, so the movements exist. What is missing is a place to move
@@ -239,6 +242,7 @@ Wheel Balancing, Tire Mounting, Nitrogen, Battery Replacement, OBD.
 ### Q-03 · The two commercial sizes you have actually sold *(HIGH)*
 
 ✅ You have **confirmed sold**:
+
 - **Radar Renegade R/T+ `265/65R17`** — 🔴 TireDepot returned 404 for it, so I
   have **no anchor at all** and substituted BFGoodrich
 - **Blacklion Mix `11R22.5`** — 🔴 no PH price found anywhere
@@ -330,6 +334,7 @@ three** (`onHand`, `reserved`, `available`) and has **no `onOrder`**.
 
 > **Is a tyre that is on a PO but not yet on the rack — in stock or not?**
 > It is **not**, and the booking flow will refuse correctly without it. But:
+>
 > - A6's brief asks for a **"tell me when it lands"** flow. **It has nothing to
 >   read today.** 🟡 That flow becomes a paper phone log.
 > - A4's shortfall state says *"we may need to order this in"*. 🔴 **With no
@@ -389,6 +394,7 @@ discrepancy is treated as undeclared sales.** ✅ Art. 68(b)(5): keep purchase
 records for the warranty's life.
 
 > **Real questions:**
+>
 > - Who does the count — you, or a staff member?
 > - How often — ✅ `cycleCountDays` per product needs a real number
 > - **Do you have a system, or a notebook?**
@@ -398,6 +404,7 @@ records for the warranty's life.
 ### Q-31 · Do you decant oil? *(HIGH)*
 
 🔴 If you decant 4 L cans into 1 L bottles:
+
 - ✅ Motul, first-party: *"avoid transferring oil into unlabelled or non-airtight
   containers"*
 - Decanted oil has a **different shelf life** from sealed

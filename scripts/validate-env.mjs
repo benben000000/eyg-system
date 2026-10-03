@@ -109,79 +109,257 @@ function parseDotenvKeys(text) {
 }
 
 /**
+ * Characters after which a `/` begins a REGEX LITERAL rather than a division.
+ *
+ * `a / b` is division: the previous significant character is an identifier or a
+ * `)`. `/(ql)?/.test(v)` is a regex: the previous character is an operator or an
+ * opening bracket. This is the standard heuristic, and it is only ever used to
+ * decide what to BLANK — so a wrong guess costs a blanked character rather than a
+ * mis-parsed schema.
+ */
+const REGEX_AFTER = new Set(["(", ",", "=", ":", "[", "!", "&", "|", "?", ";", "{", "}", "+", "-", "*", "%", "<", ">", "~", "^", "\n"]);
+
+/**
+ * Blanks every part of `src` that is not structural code: block comments, line
+ * comments, string literals, template literals (including their `${}` holes), and
+ * regex literals.
+ *
+ * LENGTH AND OFFSETS ARE PRESERVED — each character becomes a space, except a
+ * newline — so a position in the result refers to the same position in the input.
+ *
+ * WHY THIS REPLACED A `//` STRIPPER
+ *
+ * The previous implementation removed `//` comments and then counted braces. On
+ * this file it failed while appearing to work, because a regex literal can END in
+ * `//`:
+ *
+ *     .refine((v) => /^postgres(ql):\/\//.test(v), { message: "..." })
+ *
+ * "Strip to the next //" truncated the line there and threw away the `{` that
+ * opens the options object. The brace counter then desynchronised: `message` was
+ * read as though it were a schema key, the counter hit zero early, and every real
+ * key after that line became invisible. The result was 4 keys where 39 are
+ * declared — and the gate whose entire job is to catch `.env.example` drift was
+ * reporting noise instead of drift.
+ *
+ * A stripper that cannot see regex literals is not a stripper.
+ *
+ * @param {string} src
+ * @returns {string}
+ */
+function blankNonCode(src) {
+  const out = src.split("");
+  const blank = (from, to) => {
+    for (let k = from; k < to; k += 1) if (out[k] !== "\n") out[k] = " ";
+  };
+
+  // The last character of real code emitted. Drives regex-vs-division.
+  let prev = "\n";
+  let i = 0;
+
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    // ── Line comment ───────────────────────────────────────────────────
+    if (ch === "/" && next === "/") {
+      let j = i;
+      while (j < src.length && src[j] !== "\n") j += 1;
+      blank(i, j);
+      i = j;
+      continue;
+    }
+
+    // ── Block comment ──────────────────────────────────────────────────
+    if (ch === "/" && next === "*") {
+      let j = i + 2;
+      while (j < src.length && !(src[j] === "*" && src[j + 1] === "/")) j += 1;
+      const stop = Math.min(j + 2, src.length);
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+
+    // ── String literal ─────────────────────────────────────────────────
+    if (ch === "'" || ch === '"') {
+      let j = i + 1;
+      while (j < src.length) {
+        if (src[j] === "\\") { j += 2; continue; }
+        if (src[j] === ch) break;
+        j += 1;
+      }
+      const stop = Math.min(j + 1, src.length);
+      blank(i, stop);
+      i = stop;
+      prev = ch;
+      continue;
+    }
+
+    // ── Template literal ──────────────────────────────────────────────────
+    // The `${...}` holes are blanked too, which is safe: an interpolation
+    // contributes exactly one `{` and one `}`, so removing both leaves the brace
+    // depth unchanged.
+    if (ch === "`") {
+      let j = i + 1;
+      let hole = 0;
+      while (j < src.length) {
+        if (src[j] === "\\") { j += 2; continue; }
+        if (hole === 0 && src[j] === "`") break;
+        if (hole === 0 && src[j] === "$" && src[j + 1] === "{") { hole = 1; j += 2; continue; }
+        if (hole > 0) {
+          if (src[j] === "{") hole += 1;
+          else if (src[j] === "}") hole -= 1;
+        }
+        j += 1;
+      }
+      const stop = Math.min(j + 1, src.length);
+      blank(i, stop);
+      i = stop;
+      prev = "`";
+      continue;
+    }
+
+    // ── Regex literal ──────────────────────────────────────────────────
+    if (ch === "/" && REGEX_AFTER.has(prev)) {
+      let j = i + 1;
+      let inClass = false;
+      let closed = false;
+      while (j < src.length) {
+        const c = src[j];
+        if (c === "\\") { j += 2; continue; }
+        if (c === "\n") break; // a regex cannot span lines, so this was division
+        if (c === "[") inClass = true;
+        else if (c === "]") inClass = false;
+        else if (c === "/" && !inClass) { closed = true; j += 1; break; }
+        j += 1;
+      }
+      if (closed) {
+        while (j < src.length && /[a-z]/i.test(src[j])) j += 1;
+        blank(i, j);
+        i = j;
+        prev = "x"; // a regex is a value; it cannot be the left of a division
+        continue;
+      }
+      // Otherwise it really was division: fall through and emit the slash.
+    }
+
+    out[i] = ch;
+    if (!/\s/.test(ch)) prev = ch;
+    i += 1;
+  }
+
+  return out.join("");
+}
+
+/**
+ * Diagnostics from the parsers. These describe how well the PARSER did, not
+ * whether the env contract is honest — a parser that has drifted is a different
+ * kind of problem from a schema that has drifted, and conflating them is how a
+ * gate ends up reporting noise.
+ * @type {string[]}
+ */
+const parserNotes = [];
+
+/**
+ * An environment variable is SCREAMING_CASE by convention across every platform
+ * that will read this file — Vercel, Neon, docker-compose, a shell. Treating that
+ * as a precondition means a nested object key can never masquerade as a variable.
+ */
+const ENV_KEY = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * The floor below which a parsed schema is assumed broken rather than small.
+ * `serverSchema` currently declares 41 keys. Five is deliberately far below that,
+ * so the guard fires on a real desync rather than on a future trim.
+ */
+const MIN_SCHEMA_KEYS = 5;
+
+/**
  * Extracts the keys declared inside the Zod `serverSchema = z.object({ ... })`
- * literal. Purely textual: we find the `z.object({` that follows
- * `serverSchema` and count braces. This is intentionally naive and will need
- * updating if the schema is restructured — `validate-env` failing loudly is the
- * intended signal that it happened.
+ * literal.
+ *
+ * STRUCTURAL, NOT TEXTUAL. The source is masked through `blankNonCode` first, so
+ * braces inside comments, strings and regex literals cannot desynchronise the
+ * depth counter, and a nested options object (`{ message: ... }` inside a
+ * `.refine()`) sits at depth 2 and is therefore excluded — which is how `message`
+ * stopped being mistaken for a schema key.
+ *
+ * Only keys declared at depth 1 belong to this object.
+ *
  * @param {string} text
+ * @param {string} anchor
  * @returns {string[]}
  */
 function extractObjectKeys(text, anchor) {
   const anchorAt = text.indexOf(anchor);
   if (anchorAt === -1) return [];
 
+  const code = blankNonCode(text);
+
   // The declaration may be written `z.object({`, `z\n  .object({` or
-  // `z.object(\n{`. Match the call, then find its brace.
+  // `z.object(\n{`. Match it in the MASKED text so a `.object({` inside a comment
+  // cannot be mistaken for the schema itself.
   const callRe = /\.object\s*\(\s*\{/g;
   callRe.lastIndex = anchorAt;
-  const call = callRe.exec(text);
+  const call = callRe.exec(code);
   if (!call) return [];
 
-  const open = text.indexOf("{", call.index);
-  let depth = 0;
-  let inner = "";
-  for (let i = open; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === "{") {
-      depth += 1;
-      if (depth === 1) continue; // do not include the opening brace itself
-      inner += ch;
-      continue;
-    }
-    if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) break;
-      inner += ch;
-      continue;
-    }
-    inner += ch;
-  }
+  const open = code.indexOf("{", call.index);
+  if (open === -1) return [];
 
-  // Only keys declared at depth 1 belong to this object; anything deeper is a
-  // nested literal (there are none today, but this keeps the parser honest).
+  let depth = 0;
+  let end = -1;
+  for (let i = open; i < code.length; i += 1) {
+    if (code[i] === "{") { depth += 1; continue; }
+    if (code[i] === "}") {
+      depth -= 1;
+      if (depth === 0) { end = i; break; }
+    }
+  }
+  if (end === -1) return [];
+
+  const body = code.slice(open + 1, end);
   /** @type {string[]} */
   const keys = [];
+  /** @type {string[]} */
+  const rejected = [];
   let lineDepth = 1;
 
-  for (const rawLine of inner.split(/\r?\n/)) {
-    const line = stripLineComment(rawLine);
+  for (const line of body.split(/\r?\n/)) {
     if (lineDepth === 1 && line.trim() !== "") {
       const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/.exec(line);
-      if (m && m[1] && !keys.includes(m[1])) keys.push(m[1]);
+      if (m && m[1]) {
+        // An environment variable is SCREAMING_CASE by convention. Anything else
+        // means the depth tracking reached too far into a nested object, which is
+        // precisely how `message` (a `.refine()` options key) was previously
+        // reported as a schema key. Record it rather than silently dropping it, so
+        // a future drift is visible.
+        if (!ENV_KEY.test(m[1])) rejected.push(m[1]);
+        else if (!keys.includes(m[1])) keys.push(m[1]);
+      }
     }
     for (const ch of line) {
       if (ch === "{") lineDepth += 1;
       else if (ch === "}") lineDepth -= 1;
     }
   }
-  return keys;
-}
 
-/** Removes a `//` line comment without touching a `//` inside a string. */
-function stripLineComment(line) {
-  let inQuote = null;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (inQuote) {
-      if (ch === inQuote) inQuote = null;
-    } else if (ch === '"' || ch === "'" || ch === "`") {
-      inQuote = ch;
-    } else if (ch === "/" && line[i + 1] === "/") {
-      return line.slice(0, i);
-    }
+  // A parser that found a `z.object({...})` but almost nothing inside it is
+  // broken, not describing a small schema. Reporting 4 of 39 keys and letting the
+  // caller conclude the `.env.example` is fine is the failure mode this replaces,
+  // so it is now an explicit, impossible-to-miss note.
+  if (rejected.length > 0) {
+    parserNotes.push(
+      `${anchor}: ignored ${rejected.length} non-env key(s) at depth 1 (${rejected.slice(0, 4).join(", ")})`,
+    );
   }
-  return line;
+  if (keys.length < MIN_SCHEMA_KEYS) {
+    parserNotes.push(
+      `${anchor}: found only ${keys.length} key(s). If the schema really is that small, lower MIN_SCHEMA_KEYS; otherwise the depth tracking is wrong.`,
+    );
+  }
+
+  return keys;
 }
 
 /**
@@ -455,6 +633,13 @@ if (!opts.quiet) {
     `${c(BLD, "ENV CONTRACT")}  ${c(DIM, `${serverKeys.length} schema keys · ${documentedKeys.length} documented`)}\n`,
   );
 
+  // Parser health first. If the parser has drifted, everything below it is
+  // suspect, and burying that under the findings it produced is how a broken
+  // gate gets trusted.
+  for (const n of parserNotes) {
+    process.stdout.write(`  ${c(RED, "PARSER")} ${n}\n`);
+  }
+
   for (const w of warnings) {
     process.stdout.write(`  ${c(YEL, "warn")}  ${w}\n`);
   }
@@ -464,6 +649,16 @@ if (!opts.quiet) {
   if (problems.length === 0 && warnings.length === 0) {
     process.stdout.write(`  ${c(GRN, "ok")}    .env.example and src/lib/env.ts agree.\n`);
   }
+}
+
+// A drifted parser is a FAILED check even when it reports no drift, because a
+// gate that cannot see drift is indistinguishable from a clean one.
+if (parserNotes.length > 0) {
+  process.stdout.write(
+    `${c(RED, c(BLD, "FAIL"))} env parser could not read the schema reliably.\n` +
+      `  The findings above cannot be trusted until the parser is fixed.\n`,
+  );
+  process.exit(1);
 }
 
 if (summary.ok) {

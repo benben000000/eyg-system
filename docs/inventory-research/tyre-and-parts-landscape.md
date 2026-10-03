@@ -1,4 +1,5 @@
 # TYRE & PARTS LANDSCAPE — a Balanga/Bataan tyre shop
+
 ### A1 research · compiled 2026-10-03 · all checks performed 2026-10-03 (Asia/Manila)
 
 ---
@@ -721,6 +722,7 @@ shop's own Facebook posts and product photos on **2026-10-02**.
 | L16 | `docs/research/competitors.md` (prior agent) — Balanga competitive set | First-party, pre-existing in this repo | ✅ 2026-10-02 |
 
 **What I could not verify and did not fake:**
+
 1. **A Philippine tyre-size market-share dataset.** No retrievable, methodologically
    inspectable source. The ranking in §2.3 is mine, built on visible evidence.
 2. **A current PH distributor/SRP price list for PETRONAS Syntium, Shell Helix,

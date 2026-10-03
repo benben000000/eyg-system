@@ -17,6 +17,7 @@
  * ============================================================================
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import Image from "next/image";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFocusTrap, useScrollLock } from "@/hooks/useFocusTrap";
@@ -137,7 +138,7 @@ export default function Lightbox({
         </div>
 
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-card bg-surface-muted">
-          <img
+          <Image
             key={current.src}
             src={current.src}
             alt={current.alt}
@@ -145,6 +146,11 @@ export default function Lightbox({
             height={current.height}
             decoding="async"
             className="max-h-[60vh] w-auto max-w-full object-contain"
+            // Capped at the viewport because that is the most this image can
+            // ever occupy. Without `sizes`, next/image assumes 100vw at the
+            // 2048px device size, so a photo opened on a phone is fetched at
+            // desktop width — the exact case this view exists to serve.
+            sizes="100vw"
           />
 
           {images.length > 1 ? (
@@ -231,7 +237,7 @@ export function LightboxTrigger({ image, onOpen, index, className }: LightboxTri
       )}
       style={{ aspectRatio: `${image.width} / ${image.height}` }}
     >
-      <img
+      <Image
         src={image.src}
         alt={image.alt}
         width={image.width}
@@ -239,6 +245,11 @@ export function LightboxTrigger({ image, onOpen, index, className }: LightboxTri
         decoding="async"
         loading="lazy"
         className="size-full object-cover transition-transform duration-200 motion-reduce:transition-none group-hover:scale-[1.02]"
+        // The thumbnail grid. Sized for the three-across desktop layout
+        // rather than left at the 100vw default, which would fetch
+        // desktop-width rasters for a thumbnail that never exceeds a
+        // third of the screen.
+        sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
       />
       <span className="absolute inset-x-0 bottom-0 bg-ink-950/75 px-2 py-1 text-left text-xs font-bold text-white">
         {image.caption ?? "View larger"}

@@ -1,5 +1,6 @@
 # NEON + VERCEL SETUP
-### The exact steps, in order, with the traps this codebase actually has.
+
+### The exact steps, in order, with the traps this codebase actually has
 
 Read §1 before anything else. There is one failure mode here that produces a
 **green deploy and a broken site**, and it is not obvious.

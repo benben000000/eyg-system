@@ -215,6 +215,7 @@ Rebuilding the website · ❌ More than one campaign per category
 ### The Meta ads precondition
 
 **Do not launch until all three are true:**
+
 1. GBP is complete with 20+ reviews.
 2. Bay is 60%+ occupied on a normal day.
 3. There are real bay photos.

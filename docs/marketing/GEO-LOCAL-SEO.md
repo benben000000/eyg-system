@@ -113,6 +113,7 @@ in `site.ts` and confirmed on the profile. A profile with a dead number is worse
 than no profile.
 
 Formatting rules:
+
 - No "Philippines +63" prefixes in the address field
 - No emojis
 - No website-with-keyword suffixes
@@ -203,6 +204,7 @@ profile with fifteen clear ones every single time.
 | 12 | The map pin view / the landmark from the street | Answers "will I find you" |
 
 **Technical requirements**
+
 - Format: JPG or PNG. Not HEIC (Google does not process it reliably).
 - Under 10 MB each.
 - Name files descriptively: `eyg-bay-01.jpg`, not `IMG_4471.jpg`.
@@ -288,6 +290,7 @@ priority booking.
 | Facebook message | Only if they asked to be messaged | Opt-in only |
 
 SMS template (`assertSmsFits` verified at 129 characters):
+
 ```
 EYG Tire: thanks for coming in today. A Google review helps us more than
 anything: {{url}} Reply STOP to opt out.

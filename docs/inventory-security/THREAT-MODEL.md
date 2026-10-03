@@ -201,7 +201,7 @@ loser *re-reads* and correctly refuses. That is the design. The moment the
 read escapes the transaction, the retry re-reads stale truth and the loser
 succeeds too.
 
-### I2 — `reserved ≥ 0`, and `reserved ≤ onHand`.
+### I2 — `reserved ≥ 0`, and `reserved ≤ onHand`
 
 **Not stated anywhere in the contract, and not detectable.** `StockLevelDto`
 (L60–71) exposes `isOversold` for `available < 0` and nothing for
@@ -210,7 +210,7 @@ succeeds too.
 oversell — arguably worse, because it is a promise the shop makes and cannot
 keep. See FINDINGS H-08.
 
-### I3 — `StockMovement` is append-only. Never updated, never deleted.
+### I3 — `StockMovement` is append-only. Never updated, never deleted
 
 `prisma/schema.prisma:789`. The brief is unambiguous (A2 DO NOT, A4 DO NOT,
 §4 DON'T). Two schema paths violate the *spirit* even with no route in place:
@@ -222,20 +222,21 @@ keep. See FINDINGS H-08.
   script or a future count-correction route.
 
 ### I4 — One ledger row per logical movement. `idempotencyKey` is unique and
+
 the check is **inside** the transaction.
 
 `prisma/schema.prisma:805` — `idempotencyKey String? @unique`. The unique
 index is the only thing standing between a double-tapped "consume" and a
 double-spend, and it is a *global* namespace (not per-product, not per-actor).
 
-### I5 — Every human-initiated movement has a non-empty, human-readable reason.
+### I5 — Every human-initiated movement has a non-empty, human-readable reason
 
 `PostMovementInput.reason: string` is **required** (contract L187). The schema
 column is `String?` (L800) with no length cap and no not-null for the kinds
 that need one. The contract is stricter than the schema, which is the correct
 direction — but only if it is enforced at the route, not assumed.
 
-### I6 — No client-supplied truth.
+### I6 — No client-supplied truth
 
 `onHandAfter`, `available`, `reserved`, `onHand`, `costPrice`, `sellPrice`,
 `marginPct`, `isNearExpiry`, `ageDays` are **server-computed or server-owned**.
@@ -243,13 +244,13 @@ The contract already omits all of them from `PostMovementInput` except
 `costPrice`/`sellPrice` on the *product* write (which is legitimately
 staff-supplied — see H-21 for who may set it).
 
-### I7 — `costPrice` never reaches a non-staff surface.
+### I7 — `costPrice` never reaches a non-staff surface
 
 `src/lib/inventory-types.ts:92`, A2 DO NOT, A5 DO NOT, A6 DO NOT. Note this
 is stated four separate times across four agents, which is how you know it is
 the invariant most likely to be broken by accident.
 
-### I8 — A reservation cannot outlive its TTL, and a release is exactly-once.
+### I8 — A reservation cannot outlive its TTL, and a release is exactly-once
 
 `expiresAt` is the mechanism (`prisma/schema.prisma:835`). It is *not*
 sufficient on its own: a cascade delete of the `Booking` removes the
@@ -257,13 +258,14 @@ sufficient on its own: a cascade delete of the `Booking` removes the
 never decremented. **TTL correctness depends on rows continuing to exist.**
 
 ### I9 — A product can always be un-reserved, written off, or deleted from the
+
 catalogue.
 
 This is the invariant that `PRODUCT_INACTIVE` (L204) most likely breaks, and
 it is the one nobody writes a test for until the shop has lost a bay's worth
 of filters. See H-03.
 
-### I10 — Stock mutation refuses on infrastructure failure. Never fails open.
+### I10 — Stock mutation refuses on infrastructure failure. Never fails open
 
 `src/lib/ratelimit.ts:22–28` documents the platform's position: write tiers
 **fail closed** with 503, read tiers **fail open**. `readLimiter` is

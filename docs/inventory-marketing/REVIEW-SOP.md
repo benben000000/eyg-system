@@ -28,6 +28,7 @@ is the one trust number that is both true and checkable.
 ## 1. 🔴 THE BLOCKER — read this before writing a single message
 
 > ### 🚫 `BUSINESS.social.googleBusiness` is `null`, tagged `[UNVERIFIED] — Google
+>
 > ### Business Profile not yet claimed.`
 >
 > **`../marketing/GBP-LISTING.md` §6, line by line: *"⚠️ The short review URL is not
@@ -76,10 +77,13 @@ The shop's real objection is not price, it is **fear of being overcharged**
 
 ## 2. The four rules — absolute, from `PROMO-PLAYBOOK.md` §8 and `GBP-LISTING.md` §6
 
-> ### 1. Ask **everyone**.
-> ### 2. Offer **nothing** in exchange.
-> ### 3. Ask for "an **honest** review" — never "a 5-star review".
-> ### 4. Reply to **every** review within 48 hours.
+> ### 1. Ask **everyone**
+>
+> ### 2. Offer **nothing** in exchange
+>
+> ### 3. Ask for "an **honest** review" — never "a 5-star review"
+>
+> ### 4. Reply to **every** review within 48 hours
 
 ### 2.1 Why rule 1 is not negotiable
 
