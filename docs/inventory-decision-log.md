@@ -494,3 +494,82 @@ and `.next/static` would have to be copied alongside.
 
 When this is done, delete §15.2 rather than leaving it as history — the copies it
 describes would be carrying a type-checking package for no reason.
+
+## 16. Lighthouse ran for the first time, and these are the first real numbers
+
+The performance gate had never executed. `staticDistDir: "./.next"` told LHCI
+to serve that directory itself and ignore the `next start` server the job spends a
+step starting — and `.next` is a server build with no `index.html` in it, so every
+audit failed identically:
+
+    LH:<every audit>:warn Caught exception: ERRORED_DOCUMENT_REQUEST
+
+That reads like the site being too slow to load. It is the opposite: no document
+ever arrived. The `curl /api/health` check passed throughout, because it tested
+the server LHCI was not using.
+
+### 16.1 What it measured, once it was pointed at the server
+
+Three pages, two runs each, simulated slow-4G with a 4x CPU slowdown. Against the
+budget in `.github/lighthouserc.json`:
+
+    category            required    measured
+    performance           >= 0.90   0.77  0.83  0.84
+    accessibility         >= 0.95   0.90  0.91
+    best-practices        >= 0.90   0.81  0.84  0.87
+    seo                   >= 0.95   0.91
+
+and two specific audits:
+
+    color-contrast                    failing (maxLength 0 required)
+    largest-contentful-paint          failing (max 2500 ms)
+
+**These thresholds were not weakened.** Lowering them to the measured values would
+make the pipeline green and the site no better, and a gate that means whatever
+makes it pass is not a gate. The numbers are recorded here instead, so the work is
+a list rather than a discovery.
+
+The deploy guard will stay red while these are outstanding. That is the guard
+working: this is a site that has not been measured, with a known contrast failure
+and a known LCP, and it should not ship on the strength of a green tick it has not
+earned.
+
+### 16.2 Two config faults, both of which were failing regardless of the site
+
+`"preset": "lighthouse:recommended"` in the `assert` block contradicted the rest
+of the same file. `skipAudits` skips `canonical`, `hreflang` and `inspector-issues`;
+the preset asserts `auditRan` on those same three. They could not both hold, so
+those assertions failed on every run no matter what the site did. The preset also
+contributed audits this file never anticipated — `bf-cache`,
+`forced-reflow-insight`, `legacy-javascript-insight`,
+`network-dependency-tree-insight` — none of which are declared here.
+
+Removed. The 45 explicit assertions are the entire budget, which is what the file
+already looked like. A preset layered on top of an explicit list is a second source
+of truth that disagrees with the first — the same shape as the coverage thresholds
+that were duplicated between `vitest.config.ts` and the CI command line.
+
+A guard now fails the job immediately, with the reason, if `staticDistDir` ever
+returns — including the specific check that `.next/index.html` exists.
+
+### 16.3 Ruled out by measurement, not by argument
+
+  * **No database.** The lighthouse job declares no Postgres and its `DATABASE_URL`
+    points at a dead port. With and without a migrated database, all three audited
+    pages returned 200 in 17-79 ms.
+  * **The headless user agent.** `headlesschrome` is in the middleware's scraper
+    list and Lighthouse runs headless Chrome. Both a desktop Chrome UA and a
+    `HeadlessChrome` UA returned 200 on all three pages — and the scraper list is
+    only consulted for `/api/*`.
+  * **Unreachable third-party images.** Every absolute URL in the three pages was
+    listed: all hyperlinks and XML namespaces. No external image sources, so
+    nothing that could stall a load event.
+
+### 16.4 Left alone, deliberately
+
+`collect.settings` sets `"preset": "desktop"` alongside `formFactor: "mobile"`
+and `screenEmulation.mobile: true`. Every key the preset sets is explicitly
+overridden except `emulatedUserAgent`, so it is inert-but-misleading rather than
+wrong. Removing it would change the emulated user agent and therefore the
+measurement, and this was not the moment to make an unmeasured change to a
+performance gate. Worth doing, with the scores before and after.
