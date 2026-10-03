@@ -1062,7 +1062,12 @@ jobs:
           DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
           AUTH_SECRET: lighthouse-stub-not-a-secret-00000000000000000000
           PII_ENCRYPTION_KEY: lighthouse-stub-not-a-secret-00000000000000000000
-          WEBHOOK_SIGNING_SECRET: lighthouse-stub
+          # 16 characters minimum. `lighthouse-stub` was 15 and the server
+          # refused to boot — which surfaced as "Server did not start", four
+          # steps from the cause, in a job whose whole purpose is measuring page
+          # weight. `npm run check:stubs` reads the minimum out of env.ts so this
+          # class cannot come back silently.
+          WEBHOOK_SIGNING_SECRET: lighthouse-stub-not-a-secret
           NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3000
 
       # throttling-method=simulate gives every user the same slow-4G phone, so

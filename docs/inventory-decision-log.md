@@ -378,3 +378,119 @@ reads it next.
 - **The seed conflict is unresolved** (§7): 28 generic placeholders versus 48 researched
   rows. The researched catalogue must win, and it must not ship until the UI refuses to
   present unconfirmed prices as real.
+
+## 15. The container runs on Next's defaults, and its database was empty
+
+Both of these were found by the container smoke test, which had never run: the
+base image tag `node:20.11.0-alpine3.21` was never published, so `docker-build`
+had never got as far as compiling the app, let alone starting it. Fixing the tag
+unlocked four latent faults in sequence, and each one had been sitting in the
+repository the whole time.
+
+### 15.1 A file the app needs, absent from the image (twice)
+
+The first was `vitest.config.ts`: `.dockerignore` excluded it by exact name while
+`vitest.inventory.config.ts` — which imports it — survived, and `tsconfig.json`
+includes every `.ts` file, so `next build` type-checked the survivor in the image
+and failed:
+
+    Type error: Cannot find module './vitest.config'
+
+The second was `next.config.ts` itself, which the runner stage never copied at all.
+`next start` therefore ran on Next's built-in defaults, and `poweredByHeader:
+false` was among the things it discarded. Also lost: `compress`,
+`productionBrowserSourceMaps`, `images.*`, `experimental.optimizePackageImports`
+and the `headers()` block — though the middleware sets most of those headers
+itself, which is exactly why the smoke test's header checks passed and hid the
+rest.
+
+The general shape is worth naming: **a file is excluded from the image, and
+something still in the image refers to it.** Nothing on a workstation can see it,
+because in a checkout both files are present. `npm run check:docker-context`
+walks the build context the way Docker assembles it and resolves every relative
+import against what actually survived — against the context, not the filesystem,
+because asking the filesystem finds the file on disk and reproduces the blindness
+the check exists to remove.
+
+### 15.2 Copying the config on its own would have been worse
+
+`next start` transpiles `next.config.ts` at runtime using the `typescript` package,
+which is a devDependency that `npm ci --omit=dev` removes. Measured:
+
+    next start, config present, typescript absent:
+      warning  Installing TypeScript as it was not found while loading
+               "next.config.ts".
+      error    Failed to load next.config.ts
+               Error: Cannot find module 'typescript'
+
+So the obvious one-line fix would have traded a missing response header for a
+container that does not boot. Both are now copied out of the builder, with the
+reasoning in the Dockerfile so the pair is not pruned as one stray line.
+`typescript` is deliberately not moved into `dependencies`: it is a build tool
+that happens to be needed to read a config at boot.
+
+### 15.3 A stub one character short, in two jobs
+
+`WEBHOOK_SIGNING_SECRET` requires 16 characters. The container was launched with a
+15-character value and the lighthouse job with a 15-character value, and in both
+cases the app booted, validated, and refused — reporting a *container* problem and
+a *server did not start* problem respectively, neither of which points at the
+cause. `npm run check:stubs` reads the minimums out of `src/lib/env.ts` rather
+than restating them.
+
+That check then had a bug of its own worth recording. It collected secrets into a
+Map keyed by variable name, per file, and reported one value per variable — but a
+single workflow legitimately declares different stubs for different jobs. The map
+kept whichever was parsed last, so the lighthouse job's 15-character stub was
+silently replaced by a 28-character value from the docker-run step, and the check
+reported **green while a real job was failing on it**. Every declaration is now
+collected with its line number and every one checked. It found the lighthouse stub
+on its first run against the unfixed repository.
+
+### 15.4 The container's database was never migrated
+
+The job started an empty Postgres and started the container against it. `/api/ready`
+checks `_prisma_migrations` and correctly answered 503 — "can you serve?", with
+the honest answer "there is no database". Nothing else failed because most routes
+are static, which is precisely what made the gap easy to miss. The job now runs
+`prisma migrate deploy` against the container's published port, the same command
+the deploy pipeline runs.
+
+### 15.5 Known and NOT fixed: `next start` with `output: "standalone"`
+
+Next prints, on every `next start`:
+
+    ? "next start" does not work with "output: standalone" configuration.
+      Use "node .next/standalone/server.js" instead.
+
+It works today — the container smoke test passes end to end — and it has through
+15.x. It is nevertheless a configuration Next declares unsupported, so a future
+minor could remove it, and this is a production image.
+
+It is recorded rather than changed because the change cannot be verified on this
+machine: there is no Docker, and the container path is the one thing currently
+green. Trading a verified path for an unverified one to silence a warning is not a
+good trade. The recipe, measured rather than recalled:
+
+    .next/standalone/                 102 MB, 3237 files   (node_modules alone)
+    full node_modules              1,103 MB, 52,553 files
+    .next/standalone/.next/static    absent — must be copied in
+    .next/standalone/public          absent — must be copied in
+
+so the runner stage becomes:
+
+    COPY --from=builder /app/.next/standalone ./
+    COPY --from=builder /app/.next/static ./.next/static
+    COPY --from=builder /app/public ./public
+    COPY --from=builder /app/prisma ./prisma
+    COPY --from=builder /app/scripts ./scripts
+    CMD ["node", "server.js"]
+
+and the `next.config.ts` and `typescript` copies from §15.2 become unnecessary,
+because `server.js` has the configuration baked in and reads no config file. The
+lighthouse job needs the matching change: its artifact is `path: .next`, so
+`.next/standalone/server.js` is already there, but `public/` is restored separately
+and `.next/static` would have to be copied alongside.
+
+When this is done, delete §15.2 rather than leaving it as history — the copies it
+describes would be carrying a type-checking package for no reason.
