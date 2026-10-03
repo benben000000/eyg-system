@@ -900,3 +900,65 @@ is what pins the SEO category at 91 rather than higher.
 
 For a site whose domain is not yet pointed at real traffic, that is a fair trade
 against a page that renders at all.
+
+## 19. A JSON comment key cost a deploy
+
+`vercel.json` refused to build:
+
+```text
+The `vercel.json` schema validation failed with the following message:
+should NOT have additional property `//cron`
+```
+
+The key was added deliberately, two commits ago, to carry a note about the cron
+schedule. JSON has no comment syntax, so the note went in under a `"//cron"`
+property on the theory that most tooling ignores unknown keys. That theory was
+wrong in the one place it mattered: Vercel validates this file against a published
+schema and refuses the entire deployment if any top-level key is not in it.
+
+The cost is not the failed build. It is that the note had to live somewhere
+Vercel will not read, and it could have been put there from the start.
+
+**Where the note lives now.** This section.
+
+## 19.1 What the cron is doing, and what must change before launch
+
+`vercel.json` runs `/api/cron/tick` on `0 2 * * *` — once a day at 2am.
+
+Vercel's Hobby plan rejects a cron that fires more than once a day, so the
+original `*/10 * * * *` failed the deploy outright. That was the only entry in the
+file requiring a paid plan, and it was checked rather than assumed: functions are
+at most 1 GB / 60 s, both inside Hobby, and there is no image-optimisation or
+analytics flag.
+
+`/api/cron/tick` expires stock holds, sweeps rate limits and syncs reviews. Once
+a day is ample for a demonstration and useless for production.
+
+**RESTORE `*/10 * * * *` BEFORE ACCEPTING REAL BOOKINGS.** A hold is meant to
+lapse within minutes. On a ten-minute tick a lapsed hold is swept within ten
+minutes; on a daily tick a service bay can sit unsellable for nearly 24 hours.
+Pro is required for the ten-minute tick, and Pro is required for production
+regardless.
+
+## 19.2 The guard
+
+`scripts/check-csp`-style discipline applied to this file:
+`scripts/check-vercel-config.mjs` validates `vercel.json` against the schema
+Vercel publishes at the `$schema` URL inside the file, and runs in CI.
+
+It is proven to fail before it passes. Re-adding `"//cron"` produces:
+
+```text
+FAIL  vercel.json contains JSON-comment keys: "//cron"
+FAIL  these keys are not in Vercel's schema: //cron
+```
+
+and a plausible-but-invented key such as `frameworkPreset` produces the same
+failure. The cron is asserted too, so the schedule is a checked fact rather than
+something to re-derive.
+
+The schema is **fetched, not vendored**. A vendored copy of "properties Vercel
+accepts" goes stale the moment Vercel ships a key, and a stale allowlist that
+rejects a valid key is its own outage. When the fetch fails the check degrades to
+a short vendored floor plus a warning, rather than reporting a validation it did
+not perform.

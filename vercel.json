@@ -9,7 +9,6 @@
 
   "regions": ["sin1"],
 
-  "//cron": "DAILY, not every ten minutes, and that is deliberate for now. Vercel's Hobby plan rejects a cron that fires more than once a day, so `*/10 * * * *` fails the deploy outright on the free tier — this is the ONLY entry in this file that requires a paid plan. The tick route expires stock holds, sweeps rate limits and syncs reviews; once a day is ample for a demonstration. RESTORE `*/10 * * * *` BEFORE accepting real bookings: a hold is meant to lapse within minutes, and a two-hour-old hold nobody swept is a service bay nobody can book. Pro is required for that, and Pro is required for production regardless.",
   "functions": {
     "src/app/api/health/route.ts": {
       "maxDuration": 5,

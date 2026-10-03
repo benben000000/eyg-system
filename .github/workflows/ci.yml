@@ -183,6 +183,13 @@ jobs:
       - name: Client boundary guard
         run: npm run check:boundaries
 
+      # Vercel refuses a whole deploy when vercel.json carries a key its schema
+      # does not define, and the error names the key rather than the line. That
+      # happened here once with a //cron comment key, so it is checked on every run
+      # against the schema Vercel actually publishes.
+      - name: vercel.json schema check
+        run: npm run check:vercel
+
   # ==========================================================================
   # 4. prisma-validate — schema drift, caught in seconds
   # ==========================================================================
