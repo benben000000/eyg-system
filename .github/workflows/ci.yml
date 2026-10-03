@@ -211,34 +211,60 @@ jobs:
       # the code does not expect.
       - name: Detect schema drift (schema vs. migrations)
         run: |
-          set -o pipefail
-          # `--exit-code` returns 2 when a difference exists. With no shadow
-          # database URL this compares the schema against the migration history
-          # as recorded in the repo, which is exactly what we want for a PR.
+          set -euo pipefail
+          # ---------------------------------------------------------------------
+          # WHY THIS USES THE EXIT CODE AND NOT THE OUTPUT FILE
+          #
+          # It used to run prisma with 2>&1 into a file and then fail if that
+          # file was non-empty. But prisma prints to stdout on SUCCESS too:
+          #
+          #     No difference detected.
+          #
+          # so a schema and a migration history that agree perfectly produced a
+          # non-empty file, and this gate reported drift on a clean repository.
+          # The `|| true` also threw away the exit code that --exit-code exists
+          # to provide, which is the one signal that separates three outcomes:
+          #
+          #   0  no difference
+          #   2  difference found, and the DDL to reconcile it is on stdout
+          #   1  the check could not run at all
+          #
+          # The last two were indistinguishable from here, which is why a broken
+          # check looked exactly like a dirty schema for as long as both existed.
+          #
+          # Verified against a real Postgres: with the two drifts repaired, prisma
+          # prints "No difference detected." and exits 0.
+          # ---------------------------------------------------------------------
+          SHADOW="${SHADOW_DATABASE_URL:-$DATABASE_URL}"
           if [ -z "${SHADOW_DATABASE_URL:-}" ]; then
-            echo "::notice::SHADOW_DATABASE_URL not set; comparing against the migration history instead."
-            npx prisma migrate diff \
-              --from-migrations prisma/migrations \
-              --to-schema-datamodel prisma/schema.prisma \
-              --shadow-database-url "$DATABASE_URL" \
-              --exit-code 2>&1 | tee /tmp/drift.txt || true
-            if [ -s /tmp/drift.txt ]; then
-              echo "::error title=Prisma schema drift::prisma/schema.prisma differs from prisma/migrations. Run 'npx prisma migrate dev --name <change>' and commit the SQL."
-              exit 1
-            fi
-            echo "No drift: schema.prisma matches the migration history."
-            exit 0
+            echo "::notice::SHADOW_DATABASE_URL not set; using this job database as the shadow."
           fi
+
+          code=0
           npx prisma migrate diff \
             --from-migrations prisma/migrations \
             --to-schema-datamodel prisma/schema.prisma \
-            --shadow-database-url "$SHADOW_DATABASE_URL" \
-            --exit-code 2>&1 | tee /tmp/drift.txt || true
-          if [ -s /tmp/drift.txt ]; then
-            echo "::error title=Prisma schema drift::schema.prisma differs from prisma/migrations. Generate a migration and commit it."
+            --shadow-database-url "$SHADOW" \
+            --exit-code > /tmp/drift.sql 2> /tmp/drift.err || code=$?
+
+          if [ "$code" -eq 0 ]; then
+            echo "::notice::No drift: schema.prisma matches the migration history."
+            exit 0
+          fi
+
+          # A real difference prints SQL. Anything else means the check itself
+          # failed, which is a different problem with a different fix.
+          if [ -s /tmp/drift.sql ] && grep -qiE '^(--|CREATE|ALTER|DROP)' /tmp/drift.sql; then
+            echo "::error title=Prisma schema drift::schema.prisma differs from the migration history. Create a migration with npx prisma migrate dev --name change and commit the generated SQL."
+            echo "<details><summary>SQL that would reconcile them</summary>"
+            cat /tmp/drift.sql
+            echo "</details>"
             exit 1
           fi
-          echo "No drift detected."
+
+          echo "::error title=Drift check could not run::prisma migrate diff exited $code without producing a diff. That is a broken check, not a schema problem."
+          cat /tmp/drift.err
+          exit 1
 
       - name: Fail if a migration is missing for the schema
         if: always()
@@ -503,7 +529,18 @@ jobs:
       AUTH_SECRET: "ci-stub-not-a-secret-0000000000000000000000"
       PII_ENCRYPTION_KEY: "ci-stub-not-a-secret-0000000000000000000000"
       WEBHOOK_SIGNING_SECRET: "ci-stub-not-a-secret"
-      NEXT_PUBLIC_SITE_URL: "http://localhost:3000"
+      # The REAL site URL, not http://localhost:3000.
+      #
+      # `SITE.url` is `process.env.NEXT_PUBLIC_SITE_URL ?? "https://eygtireautocare.ph"`,
+      # so a developer running the suite locally gets the https default and passes.
+      # This job overrode it with an http://localhost value, and
+      # `tests/unit/email-shell.test.ts` then failed three assertions that exist
+      # for a real reason: transactional email must carry absolute https links, and
+      # must never contain "localhost".
+      #
+      # So the test environment was wrong, not the tests. Anything a customer can
+      # receive is now built in CI with the same origin production uses.
+      NEXT_PUBLIC_SITE_URL: "https://eygtireautocare.ph"
       NODE_ENV: test
       LOG_LEVEL: silent
     steps:
