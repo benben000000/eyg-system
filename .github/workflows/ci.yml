@@ -92,6 +92,22 @@ jobs:
         # since been added, so the flag is gone rather than left as a blind spot.
         run: node scripts/validate-env.mjs
 
+      # The stubs in these workflows are launched into a container that then runs
+      # the REAL env validator. So a stub that is one character too short produces
+      # a job that fails at "wait for healthy" and reports a container problem,
+      # which is what happened:
+      #
+      #   -e WEBHOOK_SIGNING_SECRET="ci-runtime-stub"     # 15 chars
+      #   WEBHOOK_SIGNING_SECRET: secret(16)              # needs >= 16
+      #
+      #   Error: EYG Tire & Auto Care - invalid environment
+      #   WEBHOOK_SIGNING_SECRET: must be at least 16 characters
+      #
+      # The minimums are read from src/lib/env.ts, not restated, and shell
+      # expressions like $AUTH_SECRET are skipped rather than measured.
+      - name: Assert every workflow secret stub satisfies its validator
+        run: node scripts/check-stub-lengths.mjs
+
   # ==========================================================================
   # 2. lint — any warning fails the build
   # ==========================================================================
@@ -891,14 +907,31 @@ jobs:
             -e DIRECT_URL="postgresql://ci:ci@db:5432/ci?schema=public" \
             -e AUTH_SECRET="ci-runtime-stub-000000000000000000000000000" \
             -e PII_ENCRYPTION_KEY="ci-runtime-stub-000000000000000000000000000" \
-            -e WEBHOOK_SIGNING_SECRET="ci-runtime-stub" \
+            -e WEBHOOK_SIGNING_SECRET="ci-runtime-stub-not-a-secret" \
             -e NEXT_PUBLIC_SITE_URL="http://localhost:3000" \
             -e LOG_LEVEL=info \
             eyg-tire:ci
 
       - name: Wait for the container to become healthy
         run: |
-          for i in $(seq 1 40); do
+          # THE BUDGET HAS TO EXCEED THE TIME TO THE FIRST VERDICT.
+          #
+          # This loop waited 40 x 1s. Docker's default probe schedule cannot
+          # produce a verdict inside that: `--start-period=40s` keeps the status
+          # at `starting` for 40 seconds, and with `--interval=30s` the first
+          # probe that can move the status lands at 60s. The loop expired while
+          # the container was, correctly, still starting:
+          #
+          #   t=1s  health=starting
+          #   ...
+          #   t=40s health=starting
+          #   ::error title=Container never became healthy::
+          #
+          # So the loop could not have passed for ANY image. 120s covers the
+          # start period plus one full interval plus margin, and the Dockerfile
+          # now sets `--start-interval=5s` so a healthy app is normally reported
+          # within a few seconds.
+          for i in $(seq 1 120); do
             state=$(docker inspect --format '{{.State.Health.Status}}' eyg-ci-web 2>/dev/null || echo "starting")
             echo "t=${i}s health=${state}"
             if [ "$state" = "healthy" ]; then

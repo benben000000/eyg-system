@@ -180,8 +180,16 @@ EXPOSE 3000
 #
 # 40s start period: the first request after a cold start pays ISR + JIT, and a
 # container that gets killed during startup never gets to be marked unhealthy.
+#
+# `--start-interval=5s` is what makes the start period useful rather than merely
+# long. Without it Docker probes on `--interval` (30s) for the whole start
+# period, so a container that is serving after 3 seconds is not noticed until
+# 30s — and the first probe that can actually change the status lands at 60s.
+# That is why the CI wait loop, which gave up after 40s, timed out on a
+# perfectly healthy container. With a 5s start interval the verdict arrives in
+# seconds, and 120s of budget covers the worst case with room to spare.
 # ---------------------------------------------------------------------------
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --start-interval=5s --retries=3 \
   CMD wget --quiet --spider --tries=1 --timeout=4 "http://127.0.0.1:${PORT}/api/health" || exit 1
 
 CMD ["dumb-init", "--", "node_modules/.bin/next", "start", "-p", "3000", "-H", "0.0.0.0"]
