@@ -176,17 +176,21 @@ export default async function RootLayout({
        *   tree moves this site's metadata into the body, because the document
        *   suspends before the shell flushes.
        *
-       * The fix is known and it is not free. Getting metadata back into <head>
-       * means no request-scoped read in the tree at all, so the inline scripts must
-       * be authorised by CSP HASH instead of a per-request nonce — which means
-       * hashing next-themes' generated script and pinning it to a library version.
-       * That is a security-architecture change whose failure mode is a blank page,
-       *   and it cannot be tested here because there is no browser to enforce CSP
-       *   against. It is written up in docs/inventory-decision-log.md rather than
-       *   attempted blind. Measured evidence for the whole investigation is in §17.
+       * THE FIX WAS BUILT, MEASURED, AND REVERTED. Hash-authorising the inline
+       *   scripts instead of noncing them does put the metadata in <head> — and
+       *   refuses 70 of the 71 inline scripts on `/`, because Next delivers the
+       *   React Server Component payload as per-request inline <script> tags whose
+       *   text cannot be hashed in advance. React never hydrates. Next's docs say it
+       *   applies the nonce to its own scripts automatically; measured here, 0 of
+       *   18 chunks were nonced, and the same bug is still reported against Next
+       *   16.2.10 (vercel/next.js#95433), so upgrading is not the answer either.
+       *
+       * Full write-up, with the reproduction and the three ways out:
+       *   docs/inventory-decision-log.md §18
        *
        * DO NOT "TIDY" THE SCRIPT BACK INTO A <head> BLOCK, AND DO NOT MOVE THE
-       * NONCE READ DOWN A LEVEL BELIEVING IT ESCAPES THE PROBLEM. Both were tried. */}
+       * NONCE READ DOWN A LEVEL BELIEVING IT ESCAPES THE PROBLEM. Both were tried,
+       * and so was deleting the nonce in favour of hashes. All three were measured. */}
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         <Providers nonce={nonce}>
