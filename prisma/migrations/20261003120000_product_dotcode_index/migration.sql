@@ -1,0 +1,34 @@
+-- Reconciles prisma/schema.prisma with the migration history.
+--
+-- WHY THIS EXISTS
+--
+-- The `Product` model declares `@@index([dotCode])`, and no migration ever created
+-- the index. The two halves were written independently and never cross-checked,
+-- because the CI drift step could not run: it failed on
+--
+--     error code: P1012
+--     error: Environment variable not found: DIRECT_URL.
+--
+-- which Prisma raises while validating the datasource, before it opens a
+-- connection. So `migrate diff` never reached the comparison, and the schema and
+-- the history silently disagreed.
+--
+-- WHY THE INDEX IS WORTH HAVING
+--
+-- `Product.dotCode` is deliberately NULL on most tyre rows - a shelf holds many
+-- DOT lots, and the age that matters lives on `StockLot`, which has its own
+-- `StockLot_productId_dotCode_idx`. But the column is still populated for some
+-- products, and any query filtering on it does a sequential scan without this.
+--
+-- ADDITIVE AND BACKWARD-COMPATIBLE
+--
+-- CREATE INDEX takes a lock that blocks writes on the table, so this is run while
+-- the old code is still serving traffic. `Product` is written on RECEIVE and on a
+-- cycle-count correction, not on the booking path, so the window is small; and
+-- `IF NOT EXISTS` makes a re-run a no-op rather than an error.
+--
+-- CONCURRENTLY would avoid the write lock, but it cannot run inside a transaction,
+-- and Prisma runs each migration in one. That trade is recorded here rather than
+-- silently taken.
+
+CREATE INDEX IF NOT EXISTS "Product_dotCode_idx" ON "Product"("dotCode");

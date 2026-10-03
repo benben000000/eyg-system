@@ -905,6 +905,15 @@ model Reservation {
   @@index([status, expiresAt])
   @@index([bookingId])
   @@index([expiresAt])
+    // Declared here to match an index the migration history already created as
+    // `reservation_heldFor_idx`. Without this declaration the datamodel and the
+    // database disagree, and `migrate diff` reports an index to DROP - which the next
+    // `migrate deploy` would then apply, silently undoing a deliberate index.
+    //
+    // `map:` is the whole mechanism. Prisma's default name would be
+    // `Reservation_heldFor_idx`, and renaming the index that is already in the
+    // database is a far larger change than declaring the name already there.
+    @@index([heldFor], map: "reservation_heldFor_idx")
 }
 
 /// Cycle counting: count the shelf without closing the bay.
