@@ -112,6 +112,15 @@ const config = [
     files: ["src/components/ui/JsonLd.tsx"],
     rules: { "react/no-danger": "off" },
   },
+
+  {
+    // CommonJS helpers run under plain `node --require`, before any bundler or
+    // type system exists. `require()` is the entire point of the `.cjs`
+    // extension - rewriting them as ESM would mean threading a loader hook
+    // through `node --import` for no benefit.
+    files: ["scripts/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ];
 
 export default config;

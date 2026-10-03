@@ -39,6 +39,7 @@ import { prisma, withSerializableRetry } from "@/lib/server/db";
 
 import { computeMarginPct } from "./products";
 import { ensureLevel } from "./stock-engine";
+import { parseTyreSize } from "./stock-engine.test-support";
 
 /** The marker copied onto every seeded product so a suggested price is visible. */
 export const UNCONFIRMED_MARKER = "SUGGESTED — owner unconfirmed";
@@ -515,107 +516,350 @@ export interface SeedRequirement {
 }
 
 /**
- * A minimal, honest starting BOM. NOT applied by default — creating requirements
- * is the booking integration's call, and a wrong BOM produces a wrong promise.
- * Exported so the integration agent (or a deliberate seed step) can apply it.
+ * THE BILL OF MATERIALS — which service physically consumes which part.
+ *
+ * ============================================================================
+ * THIS REPLACED A VERSION THAT SILENTLY DID NOTHING.
+ *
+ * The previous list named eight product SKUs and service slugs that do not exist:
+ * every SKU was from the placeholder catalogue. `applyRequirements()` matched zero
+ * rows, reported `requirementsCreated: 0`, and nothing noticed — a seed reporting
+ * its own total failure as a number nobody read.
+ *
+ * Every line below names a SKU and a slug that exist in the researched catalogue
+ * and the seeded service list.
+ *
+ * WHERE THE MAPPING COMES FROM
+ *
+ * `docs/inventory-research/tyre-and-parts-landscape.md` §1.1, which is an opinion
+ * about physical reality rather than a researched claim — so it is treated as one.
+ * Four findings from that document are load-bearing:
+ *
+ *   1. NITROGEN IS NOT INVENTORY. "Nitrogen Tire Inflation" is one of the ten
+ *      confirmed services and the single most tempting place to invent a gas SKU.
+ *      Nitrogen comes from an on-premises cylinder. No product exists, so no
+ *      service below consumes one.
+ *
+ *   2. BRAKE CLEANING IS A CONSUMABLE JOB, NOT A BRAKE-PARTS JOB. On a shop this
+ *      size it is overwhelmingly aerosol brake cleaner and a brake-fluid top-up,
+ *      and it is NOT the same booking as a pad change. Keeping them apart is why
+ *      `brake-fluid` consumes cleaner and fluid while `brake-pads` consumes pads.
+ *
+ *   3. UNDERCOATING AND ALIGNMENT CONSUME NOTHING. Alignment is labour and a
+ *      machine. No SKU until the owner signs off the service list.
+ *
+ *   4. MANY SERVICES HAVE NO CONSUMABLE AT ALL, which is normal, not a gap.
+ *
+ * TWO MODELLING LIMITS, STATED RATHER THAN PAPERED OVER
+ *
+ *   A. `ServicePartRequirement` is service → product. It CANNOT express "one oil
+ *      filter, but WHICH one depends on the vehicle", and the catalogue carries six
+ *      vehicle-specific oil filters. Every such line below is therefore
+ *      `isBlocking: false`: the QUANTITY is what a booking reserves, and the
+ *      mechanic picks the part against the vehicle at handover. Marking them
+ *      blocking would refuse a customer's booking over a part the shop may well
+ *      have in a different filter — a lost sale, not a safety issue.
+ *
+ *   B. OIL VOLUME IS ENGINE-DEPENDENT and unresolved (research open question
+ *      Q-02). Every line below assumes ONE 4-litre can, which covers most cars in
+ *      the local fleet but not all. It is blocking because handing a car back
+ *      without oil is worse than losing a booking. When the owner confirms the real
+ *      fill volumes, only this number changes.
+ *
+ * TOOLS ARE DELIBERATELY ABSENT. A wheel balancer is stock in the sense that the
+ * shop owns it, but no service "consumes" one, and `reorderPoint` is 0 so it never
+ * reaches the order list.
  */
 export const SEED_REQUIREMENTS: readonly SeedRequirement[] = Object.freeze([
-  { serviceSlug: "pms-a", productSku: "OIL-5W30-1L", qtyPerService: 4, isBlocking: true },
-  { serviceSlug: "pms-a", productSku: "FLT-OIL-01", qtyPerService: 1, isBlocking: true },
-  { serviceSlug: "pms-b", productSku: "OIL-5W30-1L", qtyPerService: 4, isBlocking: true },
-  { serviceSlug: "pms-b", productSku: "FLT-OIL-02", qtyPerService: 1, isBlocking: true },
-  { serviceSlug: "pms-c", productSku: "OIL-10W40-1L", qtyPerService: 4, isBlocking: true },
-  { serviceSlug: "pms-c", productSku: "FLT-AIR-01", qtyPerService: 1, isBlocking: false },
-  { serviceSlug: "brake-pads", productSku: "BRK-PAD-FRT-01", qtyPerService: 1, isBlocking: true },
-  { serviceSlug: "tire-change", productSku: "ACC-BALANCE-112", qtyPerService: 1, isBlocking: false },
+  // ── PMS A — Change Oil & Filter ──────────────────────────────────────────
+  // The two things a PMS indisputably consumes.
+  { serviceSlug: "pms-a", productSku: "OIL-PTR-SYN5000-5W30-4L", qtyPerService: 1, isBlocking: true },
+  {
+    serviceSlug: "pms-a",
+    productSku: "FLT-OIL-ACD-YZZE1",
+    qtyPerService: 1,
+    // Non-blocking: one of six vehicle-specific filters. See note A above.
+    isBlocking: false,
+  },
+
+  // ── PMS B — Oil, Filter & Full Check ────────────────────────────────────
+  // PMS A, plus the consumables a "full check" actually uses.
+  { serviceSlug: "pms-b", productSku: "OIL-PTR-SYN5000-5W30-4L", qtyPerService: 1, isBlocking: true },
+  { serviceSlug: "pms-b", productSku: "FLT-OIL-ACD-YZZE1", qtyPerService: 1, isBlocking: false },
+  { serviceSlug: "pms-b", productSku: "FLT-AIR-ACD-INNOVA", qtyPerService: 1, isBlocking: false },
+  { serviceSlug: "pms-b", productSku: "CON-BRKCLN-BDX-500", qtyPerService: 1, isBlocking: false },
+  { serviceSlug: "pms-b", productSku: "CON-GRS-MP3-1KG", qtyPerService: 1, isBlocking: false },
+
+  // ── PMS C — Oil, Filter, Brakes & Alignment ──────────────────────────────
+  // PMS B, plus a brake-fluid top-up. The alignment itself consumes nothing.
+  { serviceSlug: "pms-c", productSku: "OIL-PTR-SYN5000-5W30-4L", qtyPerService: 1, isBlocking: true },
+  { serviceSlug: "pms-c", productSku: "FLT-OIL-ACD-YZZE1", qtyPerService: 1, isBlocking: false },
+  { serviceSlug: "pms-c", productSku: "FLT-AIR-ACD-INNOVA", qtyPerService: 1, isBlocking: false },
+  { serviceSlug: "pms-c", productSku: "BRK-FLUD-DOT4-1L", qtyPerService: 1, isBlocking: false },
+  { serviceSlug: "pms-c", productSku: "CON-BRKCLN-BDX-500", qtyPerService: 1, isBlocking: false },
+
+  // ── Brake Cleaning & Maintenance ──────────────────────────────────────────
+  // Research finding 2: aerosol cleaner and a fluid top-up, NOT pads.
+  { serviceSlug: "brake-fluid", productSku: "CON-BRKCLN-BDX-500", qtyPerService: 1, isBlocking: true },
+  { serviceSlug: "brake-fluid", productSku: "BRK-FLUD-DOT4-1L", qtyPerService: 1, isBlocking: false },
+
+  // ── Brake Pad Replacement ────────────────────────────────────────────────
+  {
+    serviceSlug: "brake-pads",
+    productSku: "BRK-PAD-ICR-181898",
+    qtyPerService: 1,
+    // Vehicle-specific, same reasoning as the oil filter. See note A.
+    isBlocking: false,
+  },
+
+  // ── Battery Replacement ──────────────────────────────────────────────────
+  // Four battery group sizes; which one depends on the vehicle, so the quantity
+  // reserves and the mechanic confirms the group at handover.
+  { serviceSlug: "battery-replacement", productSku: "BAT-AMR-GO-NS40", qtyPerService: 1, isBlocking: false },
+
+  // ── Tyre Change & Balancing ──────────────────────────────────────────────
+  // Research: balancing weights and a valve core. There is no "balancing weight"
+  // SKU — the shop reuses the weights it already owns, so that is a tooling
+  // consumable rather than purchased stock. A valve-cap bag is tracked.
+  { serviceSlug: "tire-change", productSku: "TAR-VALV-CAP-100", qtyPerService: 1, isBlocking: false },
+
+  // ── Puncture Repair ──────────────────────────────────────────────────────
+  { serviceSlug: "puncture-repair", productSku: "TAR-SEAL-450ML", qtyPerService: 1, isBlocking: false },
+
+  // ── New Tyre Supply & Mounting ───────────────────────────────────────────
+  // Four per car. This one IS blocking: a car handed back on three tyres is a
+  // customer at the counter with a problem.
+  {
+    serviceSlug: "new-tyres",
+    productSku: "TYR-MIC-20555R16-XM2P",
+    qtyPerService: 4,
+    isBlocking: true,
+  },
 ]);
 
-// ── Markdown ingestion (for A1's researched catalogue) ──────────────────────
-
 /**
- * Parses a researched starter-catalogue markdown table into seed rows.
+ * Services that physically consume nothing.
  *
- * Deliberately forgiving about header spelling and strict about the numbers: a
- * row whose cost or sell cannot be read as a whole peso amount is SKIPPED, not
- * guessed. A seed that invents a price is worse than a seed that misses a row.
- *
- * Returns `{ rows, skipped }` so the caller can report exactly what it did not
- * import — silence about a skipped row reads as "it imported everything".
+ * Listed so the absence is visible and reviewable rather than looking like an
+ * oversight. Four of these are labour-only; the rest simply have no SKU in the
+ * researched catalogue yet.
  */
-export function parseStarterCatalogueMarkdown(markdown: string): {
-  rows: SeedProduct[];
-  skipped: Array<{ line: number; reason: string }>;
-} {
-  const rows: SeedProduct[] = [];
-  const skipped: Array<{ line: number; reason: string }> = [];
-  const lines = markdown.split(/\r?\n/);
+export const UNMAPPED_SERVICES: readonly string[] = Object.freeze([
+  "wheel-alignment", // labour + a machine (research finding 3)
+  "undercoating", // no SKU until the owner signs the service list
+  "engine-tune-up",
+  "ac-regas",
+  "ac-repair",
+  "spark-plugs", // no spark-plug SKU in the catalogue
+  "battery-test",
+  "roadside-assist",
+  "mobile-tire-change",
+  "tire-rotation",
+  "shock-absorber",
+]);
 
-  for (const [index, raw] of lines.entries()) {
-    const line = raw.trim();
-    const lineNumber = index + 1;
-    if (line.length === 0 || line.startsWith("#") || line.startsWith(">") || line.startsWith("```")) continue;
-    if (!line.startsWith("|")) continue;
+  // ── Markdown ingestion (the researched catalogue) ─────────────────────────
+  // The research document is the single source of truth for the catalogue, so it
+  // is READ rather than pasted in. Updating a price means editing the markdown.
 
-    const cells = line
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((c) => c.trim());
-    if (cells.length < 4) continue;
-    // Header and separator rows.
-    if (cells.every((c) => /^-{2,}$/.test(c))) continue;
-    if (/^(sku|item code)$/i.test(cells[0] ?? "")) continue;
+  /**
+   * Parse a researched starter-catalogue markdown table into seed rows.
+   *
+   * HEADER-DRIVEN, NOT POSITIONAL.
+   *
+   * The research document's column order changed while this function already
+   * existed, and a positional reader does not fail loudly when that happens: it
+   * reads the brand as a price, gets null from the peso parser, and silently
+   * skips every row. That is how 28 generic placeholders shipped in place of a
+   * 48-row researched catalogue — two correct implementations, opposite formats,
+   * neither able to see the other.
+   *
+   * So: find the header row, build a name-to-index map, and resolve every field
+   * BY NAME. Insert or reorder a column upstream and this keeps working.
+   *
+   * Strict about the numbers: a row whose cost or sell cannot be read as a whole
+   * peso amount is SKIPPED, not guessed. A seed that invents a price is worse
+   * than one that misses a row. `{ skipped }` is returned so the caller reports
+   * exactly what it did not import — silence reads as "it imported everything".
+   */
+  export function parseStarterCatalogueMarkdown(markdown: string): {
+    rows: SeedProduct[];
+    skipped: Array<{ line: number; reason: string }>;
+  } {
+    const rows: SeedProduct[] = [];
+    const skipped: Array<{ line: number; reason: string }> = [];
 
-    const [skuCell, nameCell, kindCell, unitCell, costCell, sellCell, ...rest] = cells;
-    const sku = (skuCell ?? "").toUpperCase();
-    const name = (nameCell ?? "").trim();
-    if (sku.length === 0 || name.length === 0) continue;
+    /** Normalise a header cell into a comparable key. */
+    const key = (cell: string): string =>
+      cell
+        .toLowerCase()
+        // A parenthetical CLARIFIES a column, it does not rename it. "anchor
+        // (researched)" is still `anchor`, and "costPrice (asset value)" is still
+        // `costPrice` — which is the tools table's header. Dropping the qualifier is
+        // what stops a cosmetic edit upstream from silently skipping rows.
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/[^a-z0-9]/g, "");
 
-    const kind = upperAs<ProductKindValue>(kindCell);
-    const unit = upperAs<UnitValue>(unitCell);
-    if (!kind || !unit) {
-      skipped.push({ line: lineNumber, reason: `unrecognised kind/unit: ${kindCell ?? "?"}/${unitCell ?? "?"}` });
-      continue;
+    const splitRow = (raw: string): string[] =>
+      raw
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((c) => c.trim());
+
+    const source = markdown.split(/\r?\n/);
+
+    // ── 1. Find the header row, build the name → index map ─────────────
+    let columns: Record<string, number> | null = null;
+
+    for (const [index, raw] of source.entries()) {
+      const line = raw.trim();
+      if (!line.startsWith("|")) continue;
+
+      const head = splitRow(line);
+      if (head.length < 4) continue;
+
+      // A header is the row whose first cell is the SKU column.
+      if (!/^(sku|item ?code)$/i.test(head[0]?.replace(/[\`*]/g, "") ?? "")) continue;
+
+      const map: Record<string, number> = {};
+      head.forEach((cell, i) => {
+        const k = key(cell.replace(/[\`*]/g, ""));
+        if (k.length > 0 && map[k] === undefined) map[k] = i;
+      });
+      columns = map;
+
+      // ── 2. Parse every data row beneath this header ─────────────────
+      for (let r = index + 1; r < source.length; r += 1) {
+        const dataLine = source[r]?.trim() ?? "";
+        const lineNumber = r + 1;
+
+        // A table ends at the first non-table line. A heading after it opens a
+        // new section, so drop the map and keep looking for the next header.
+        if (dataLine.length === 0 || !dataLine.startsWith("|")) {
+          if (dataLine.startsWith("###")) columns = null;
+          break;
+        }
+
+        const data = splitRow(dataLine);
+        if (data.length < 4) continue;
+        if (data.every((c) => /^-{2,}$/.test(c) || c.length === 0)) continue; // separator
+
+        const cols = columns;
+        const cell = (name: string): string => {
+          const i = cols[name];
+          return i === undefined ? "" : (data[i] ?? "").replace(/[\`*]/g, "").trim();
+        };
+
+        const sku = cell("sku").toUpperCase();
+        const name = cell("name");
+        if (sku.length === 0 || name.length === 0) continue;
+
+        const kind = upperAs<ProductKindValue>(cell("kind"));
+        const unit = upperAs<UnitValue>(cell("unit"));
+        if (!kind || !unit) {
+          skipped.push({
+            line: lineNumber,
+            reason: 'unrecognised kind/unit: "' + cell("kind") + '" / "' + cell("unit") + '"',
+          });
+          continue;
+        }
+
+        const costPrice = readPeso(cell("costprice"));
+        const sellPrice = readPeso(cell("sellprice"));
+        if (costPrice === null || sellPrice === null) {
+          skipped.push({
+            line: lineNumber,
+            reason:
+              'cost/sell not a whole peso amount: "' +
+              cell("costprice") +
+              '" / "' +
+              cell("sellprice") +
+              '"',
+          });
+          continue;
+        }
+
+        // The tyre size drives two separately indexed columns, and it is what a
+        // mechanic actually types, so parse it rather than store it opaque.
+        const sizeCell = cell("size");
+        const size = sizeCell.length > 0 ? sizeCell : undefined;
+        const parsed = sizeCell.length > 0 ? parseTyreSize(sizeCell) : null;
+
+        // Load index and speed rating ride in the product title, e.g.
+        // "Michelin Energy XM2+ 205/55R16 91V". Capture them so a mechanic does
+        // not have to read prose to answer "will this fit, is it fast enough".
+        const ratings = /\b(\d{2,3})([A-Z])\b/.exec(name);
+
+        // Use the RESEARCHED reorder figures. The original hardcoded 2 and 4,
+        // and the reorder point is the number that decides when the shop orders.
+        const reorderPoint = readPeso(cell("reorderpoint")) ?? 2;
+        const reorderQty = readPeso(cell("reorderqty")) ?? 4;
+
+        // `null` and `-` both mean "no shelf life", which is not the same as zero.
+        const shelfRaw = cell("shelflivedays");
+        const shelfLifeDays = /^(null|-|—|n\/a|)$/i.test(shelfRaw) ? undefined : (readPeso(shelfRaw) ?? undefined);
+
+        // Provenance travels with the row. The researched anchor is the only thing
+        // that makes an estimated peso defensible, so it is kept rather than
+        // discarded along with the rest of the research document.
+        const anchor = cell("anchor");
+        const note = cell("notes");
+
+        rows.push({
+          sku,
+          name,
+          kind,
+          unit,
+          brand: cell("brand") || undefined,
+          size,
+          aspectRatio: parsed?.aspectRatio,
+          rimSizeIn: parsed?.rimSizeIn,
+          loadIndex: ratings?.[1],
+          speedRating: ratings?.[2],
+          // A dotCode is deliberately NEVER seeded. One value per product cannot
+          // describe a shelf holding many DOT lots, and a wrong one is a safety
+          // claim about how old a tyre is. Lots carry it on RECEIVE instead.
+          costPrice,
+          sellPrice,
+          reorderPoint,
+          reorderQty,
+          shelfLifeDays,
+          notes: [
+            note.length > 0 ? note : null,
+            anchor.length > 0 ? "anchor: " + anchor : null,
+            UNCONFIRMED_MARKER,
+          ]
+            .filter((x): x is string => x !== null)
+            .join(" — "),
+        });
+      }
     }
 
-    const costPrice = readPeso(costCell);
-    const sellPrice = readPeso(sellCell);
-    if (costPrice === null || sellPrice === null) {
-      skipped.push({ line: lineNumber, reason: `cost/sell not a whole peso amount: ${costCell ?? "?"}/${sellCell ?? "?"}` });
-      continue;
+    if (columns === null) {
+      skipped.push({
+        line: 0,
+        reason: "no catalogue table found: expected a header row beginning | sku |",
+      });
     }
 
-    const notes = rest.find((c) => c.length > 0);
-    rows.push({
-      sku,
-      name,
-      kind,
-      unit,
-      costPrice,
-      sellPrice,
-      reorderPoint: 2,
-      reorderQty: 4,
-      // Anything the research doc did not mark as verified stays flagged.
-      notes: notes && !/^(verified|confirmed|source)/i.test(notes) ? `${notes} — ${UNCONFIRMED_MARKER}` : UNCONFIRMED_MARKER,
-    });
+    return { rows, skipped };
   }
 
-  return { rows, skipped };
-}
+  function upperAs<T extends string>(value: string | undefined): T | null {
+    const raw = (value ?? "").trim().toUpperCase();
+    return raw.length > 0 ? (raw as T) : null;
+  }
 
-function upperAs<T extends string>(value: string | undefined): T | null {
-  const raw = (value ?? "").trim().toUpperCase();
-  return raw.length > 0 ? (raw as T) : null;
-}
-
-/** Strips ₱, thousands separators and any trailing "-estimate" decoration. */
-function readPeso(value: string | undefined): number | null {
-  if (typeof value !== "string") return null;
-  const digits = value.replace(/[^\d]/g, "");
-  if (digits.length === 0) return null;
-  const n = Number.parseInt(digits, 10);
-  return Number.isSafeInteger(n) && n >= 0 ? n : null;
-}
+  /** Strips ₱, thousands separators and any trailing decoration. */
+  function readPeso(value: string | undefined): number | null {
+    if (typeof value !== "string") return null;
+    const digits = value.replace(/[^\d]/g, "");
+    if (digits.length === 0) return null;
+    const n = Number.parseInt(digits, 10);
+    return Number.isSafeInteger(n) && n >= 0 ? n : null;
+  }
 
 // ── The seed run ────────────────────────────────────────────────────────────
 
@@ -624,6 +868,14 @@ export interface SeedResult {
   productsCreated: number;
   productsSkipped: number;
   requirementsCreated: number;
+  /**
+   * BOM lines that named a service or product which does not exist.
+   *
+   * Reported rather than swallowed: an earlier version skipped them and
+   * returned 0, which is a total failure that looks like a successful run.
+   * An empty array means every line resolved.
+   */
+  requirementsUnresolved: Array<{ serviceSlug: string; productSku: string; missing: string }>;
 }
 
 export interface SeedOptions {
@@ -711,10 +963,21 @@ export async function seedCatalogue(options: SeedOptions = {}): Promise<SeedResu
     productsCreated += 1;
   }
 
-  let requirementsCreated = 0;
-  if (options.withRequirements === true) requirementsCreated = await applyRequirements();
+    let requirementsCreated = 0;
+    let requirementsUnresolved: Array<{ serviceSlug: string; productSku: string; missing: string }> = [];
+    if (options.withRequirements === true) {
+      const applied = await applyRequirements();
+      requirementsCreated = applied.created;
+      requirementsUnresolved = applied.unresolved;
+    }
 
-  const result: SeedResult = { suppliersCreated: supplierIds.size, productsCreated, productsSkipped, requirementsCreated };
+    const result: SeedResult = {
+      suppliersCreated: supplierIds.size,
+      productsCreated,
+      productsSkipped,
+      requirementsCreated,
+      requirementsUnresolved,
+    };
   logger.info("inventory.seeded", { scope: "inventory", ...result });
   return result;
 }
@@ -722,15 +985,44 @@ export async function seedCatalogue(options: SeedOptions = {}): Promise<SeedResu
 /**
  * Applies `SEED_REQUIREMENTS` by service **slug** and product **sku**, so it is
  * safe to re-run: both relations are upserted on their unique keys.
+ *
+ * REPORTS UNRESOLVED LINES INSTEAD OF SKIPPING THEM.
+ *
+ * This used to `continue` on a missing service or product and return only a
+ * count. Every line of the previous BOM named a placeholder SKU that no longer
+ * existed, so every line was skipped, the function returned `0`, and the seed
+ * printed `requirementsCreated: 0` — a total, successful-looking failure.
+ *
+ * The bill of materials is the thing that makes this a shop system rather than a
+ * spreadsheet, so its absence has to be loud.
  */
-export async function applyRequirements(): Promise<number> {
+export async function applyRequirements(): Promise<{
+  created: number;
+  unresolved: Array<{ serviceSlug: string; productSku: string; missing: string }>;
+}> {
   let created = 0;
+  const unresolved: Array<{ serviceSlug: string; productSku: string; missing: string }> = [];
+
   for (const requirement of SEED_REQUIREMENTS) {
     const [service, product] = await Promise.all([
       prisma.service.findUnique({ where: { slug: requirement.serviceSlug }, select: { id: true } }),
       prisma.product.findUnique({ where: { sku: requirement.productSku.toUpperCase() }, select: { id: true } }),
     ]);
-    if (!service || !product) continue;
+
+    if (!service || !product) {
+      unresolved.push({
+        serviceSlug: requirement.serviceSlug,
+        productSku: requirement.productSku,
+        missing: [
+          service ? null : `service "${requirement.serviceSlug}"`,
+          product ? null : `product "${requirement.productSku}"`,
+        ]
+          .filter((x): x is string => x !== null)
+          .join(" and "),
+      });
+      continue;
+    }
+
     await prisma.servicePartRequirement.upsert({
       where: { serviceId_productId: { serviceId: service.id, productId: product.id } },
       create: {
@@ -743,5 +1035,16 @@ export async function applyRequirements(): Promise<number> {
     });
     created += 1;
   }
-  return created;
+
+  if (unresolved.length > 0) {
+    logger.error("inventory.bom_unresolved", {
+      scope: "inventory",
+      count: unresolved.length,
+      // One entry per unresolved line, so a grep finds exactly which
+      // service/product pairing failed to resolve.
+      unresolved: unresolved.map((u) => `${u.serviceSlug} -> ${u.productSku} (missing ${u.missing})`),
+    });
+  }
+
+  return { created, unresolved };
 }

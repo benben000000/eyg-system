@@ -37,6 +37,8 @@
  *   SEED_SAMPLE_BOOKINGS=false     skip the demo bookings spread over 14 days.
  */
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import type { Prisma} from "@prisma/client";
 import { PrismaClient, type BookingStatus, type PromoKind } from "@prisma/client";
@@ -48,6 +50,11 @@ import { FAQS } from "../src/content/marketing/faq";
 import { PACKAGES } from "../src/content/marketing/packages";
 import { PROMOTIONS } from "../src/content/marketing/promotions";
 import { TESTIMONIALS } from "../src/content/marketing/reviews";
+import {
+  UNCONFIRMED_MARKER,
+  parseStarterCatalogueMarkdown,
+  seedCatalogue,
+} from "../src/lib/server/inventory/seed-catalogue";
 
 const prisma = new PrismaClient();
 
@@ -653,6 +660,59 @@ async function seedSampleBookings(): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Inventory ────────────────────────────────────────────────────────────────
+
+/**
+ * Seed the stock catalogue from the RESEARCHED document.
+ *
+ * Why the researched file and not the built-in list: `SEED_CATALOGUE` holds 28
+ * generic placeholders written before the research landed. They carry no brand,
+ * no price anchor, two rows are mis-kinded, and several are consumed by no
+ * confirmed service. They are the wrong catalogue to run a real shop on.
+ *
+ * The researched document is read at seed time rather than pasted in, so the
+ * document stays the single source of truth and updating prices means editing
+ * the markdown, not this file.
+ *
+ * Every peso in it is an ESTIMATE derived from a researched retail anchor and an
+ * assumed trade discount, so each row is stamped `UNCONFIRMED_MARKER` and carries
+ * its anchor in the notes. Nothing here invents an opening quantity: the shop's
+ * real count arrives through a cycle count or an `OPENING` movement, both of which
+ * write to the ledger and leave a reason.
+ */
+async function seedInventoryCatalogue(): Promise<void> {
+  const doc = readFileSync(join(process.cwd(), "docs", "inventory-research", "starter-catalogue.md"), "utf8");
+  const { rows, skipped } = parseStarterCatalogueMarkdown(doc);
+
+  log(`\u25b8 Stock catalogue`);
+  if (rows.length === 0) {
+    log("  no rows parsed — check docs/inventory-research/starter-catalogue.md");
+    for (const s of skipped.slice(0, 5)) log(`  ! line ${s.line}: ${s.reason}`);
+    return;
+  }
+
+  const result = await seedCatalogue({ catalogue: rows, withRequirements: true });
+  const byKind = new Map<string, number>();
+  for (const r of rows) byKind.set(r.kind, (byKind.get(r.kind) ?? 0) + 1);
+
+  log(`  ${result.productsCreated} products created, ${result.productsSkipped} already present`);
+  log(`  ${result.requirementsCreated} bill-of-materials lines`);
+  if (result.requirementsUnresolved.length > 0) {
+    log(`  ${result.requirementsUnresolved.length} BOM LINE(S) DID NOT RESOLVE:`);
+    for (const u of result.requirementsUnresolved) {
+      log(`    ! ${u.serviceSlug} -> ${u.productSku}: missing ${u.missing}`);
+    }
+  }
+  log(`  ${[...byKind].sort((a, b) => b[1] - a[1]).map(([k, n]) => k.toLowerCase() + " " + n).join(", ")}`);
+  if (skipped.length > 0) {
+    log(`  ${skipped.length} row(s) skipped:`);
+    for (const s of skipped.slice(0, 5)) log(`    ! line ${s.line}: ${s.reason}`);
+  }
+  log(`  ⚠ every price is ${UNCONFIRMED_MARKER} — they are estimates, not quotes.`);
+  log(`    Replace them with real supplier invoices before ordering against them.`);
+}
+
+
 // Runner
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -673,6 +733,7 @@ async function main(): Promise<void> {
   await seedHolidays();
   await seedAdminUser();
   await seedSampleBookings();
+  await seedInventoryCatalogue();
 
   process.stdout.write("\n✓ seed complete.\n");
 }
