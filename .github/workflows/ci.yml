@@ -892,6 +892,34 @@ jobs:
           docker logs eyg-ci-db
           exit 1
 
+      # The smoke test is supposed to prove the container can serve real traffic
+      # against a real database. It was not: nothing ever migrated `eyg-ci-db`,
+      # so `/api/ready` correctly answered 503 (no `_prisma_migrations` table),
+      # and the only reason nothing else failed is that most routes are static.
+      #
+      # This runs the same command the deploy pipeline runs, from the runner host
+      # against the container's published port. The web container reaches the same
+      # database as `db:5432` over the `--link`; that is the same cluster, not a
+      # different one.
+      #
+      # `npm ci` is here for the Prisma CLI. It is a devDependency, so
+      # `npx prisma` in a job that has not installed would try to fetch it from
+      # the network, unpinned, which is not something a verification step should
+      # do.
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Apply the schema to the container's database
+        run: npx prisma migrate deploy --schema prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+          DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+
       # Run the image exactly as production would, with secrets supplied at
       # RUNTIME. Nothing is baked in — which this step proves, because if any
       # value were baked, the smoke test would pass without these being set.

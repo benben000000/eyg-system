@@ -33,11 +33,12 @@
 # `no-store`, and touches nothing but the process. /api/ready is the deeper
 # check (database reachable, migrations applied) and is what compose waits on.
 #
-# NOTE ON `output: "standalone"`: next.config.ts is orchestrator-owned and does
-# not set it, so this image ships the full `.next` tree and runs `next start`.
-# Enabling standalone cuts the image by roughly 400 MB and starts ~300 ms
-# faster. See docs/ops/DEPLOYMENT.md §9 for the one-line change and why it is
-# not applied here.
+# NOTE ON `output: "standalone"`: next.config.ts DOES set it, so `next build` also
+# emits `.next/standalone`. This image deliberately does not use that — it ships
+# the full `.next` tree and runs `next start` — because it also carries `scripts/`
+# and `prisma/` and runs them from the same image (db-backup, db-restore, the
+# deploy smoke test). Switching to `server.js` is a separate, deliberate change;
+# see docs/ops/DEPLOYMENT.md §9.
 # ============================================================================
 
 # Renovate keeps these in step with .nvmrc.
@@ -153,6 +154,39 @@ COPY --from=prod-deps --chown=nextjs:eyg /app/node_modules ./node_modules
 COPY --from=builder  --chown=nextjs:eyg /app/.next ./.next
 COPY --from=builder  --chown=nextjs:eyg /app/public ./public
 COPY --from=builder  --chown=nextjs:eyg /app/prisma ./prisma
+
+# ---------------------------------------------------------------------------
+# next.config.ts AND `typescript` — BOTH, AND THE PAIR IS NOT OPTIONAL
+#
+# `next start` reads next.config.ts at RUNTIME. Without this COPY the container
+# runs on Next's built-in defaults and silently discards:
+#
+#   poweredByHeader: false   -> X-Powered-By: Next.js on every response
+#   compress, productionBrowserSourceMaps, images.*, experimental.*
+#
+# The container smoke test caught the first of those; the rest were invisible.
+# This is the same class as the missing vitest config earlier — a file the app
+# needs, absent from the image — and the same reason it cannot be seen locally.
+#
+# `typescript` has to come with it. Measured, not assumed:
+#
+#   next start, next.config.ts present, typescript absent:
+#     warning  Installing TypeScript as it was not found while loading
+#              "next.config.ts".
+#     error    Failed to load next.config.ts
+#              Error: Cannot find module 'typescript'
+#              require stack: node_modules/next/dist/build/next-config-ts/
+#                             transpile-config.js
+#
+# So copying the config on its own would trade a missing header for a container
+# that does not boot. `typescript` is a devDependency and `npm ci --omit=dev`
+# removes it from prod-deps, so it is copied out of the builder the same way
+# `.prisma` is. It is a build tool that happens to be needed to read a config at
+# boot, not a runtime dependency, so it is deliberately NOT added to
+# package.json dependencies.
+# ---------------------------------------------------------------------------
+COPY --from=builder --chown=nextjs:eyg /app/next.config.ts ./next.config.ts
+COPY --from=builder --chown=nextjs:eyg /app/node_modules/typescript ./node_modules/typescript
 
 # Runtime helpers. The smoke test runs against a live container during a deploy,
 # and db-backup/db-restore run from the same image, so both must be inside it.
