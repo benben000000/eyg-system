@@ -1076,6 +1076,35 @@ jobs:
       # Budgets (from the brief, enforced as a hard gate):
       #   LCP  < 2.5 s      CLS < 0.1      INP < 200 ms
       #   a11y >= 95        SEO >= 95      best-practices >= 90
+      # `staticDistDir` used to be set to "./.next" here, which made LHCI serve
+      # that directory itself and ignore the server this job starts. A Next server
+      # build is not a static export — `output: "standalone"` produces a server, and
+      # `.next` has no `index.html` — so every audit failed with
+      #
+      #   LH:<every audit>:warn Caught exception: ERRORED_DOCUMENT_REQUEST
+      #   Runtime error encountered: Lighthouse was unable to reliably load the
+      #   page you requested.
+      #
+      # which reads like the site being too slow to load and is the opposite. The
+      # `curl /api/health` check above passed throughout, because it tests the
+      # server LHCI was not using.
+      #
+      # Checked rather than assumed: if `staticDistDir` ever comes back, this fails
+      # immediately with the reason, instead of turning every audit into a document
+      # error that looks like a performance regression.
+      - name: Check Lighthouse is auditing the running server
+        run: |
+          set -euo pipefail
+          if grep -q '"staticDistDir"' .github/lighthouserc.json; then
+            if [ ! -f .next/index.html ]; then
+              echo "::error title=Lighthouse has no document to serve::.github/lighthouserc.json sets staticDistDir, but .next/index.html does not exist. A Next server build is not a static export, so LHCI would serve nothing and every audit would fail with ERRORED_DOCUMENT_REQUEST."
+              exit 1
+            fi
+            echo "::notice::staticDistDir is set and .next/index.html exists."
+          else
+            echo "::notice::No staticDistDir; Lighthouse will audit the server this job started."
+          fi
+
       - name: Audit the performance budget
         uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # v12 (SHA-pinned; renovate bumps it)
         with:
