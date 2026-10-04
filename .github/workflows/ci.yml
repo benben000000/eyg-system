@@ -73,10 +73,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -119,10 +119,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -153,10 +153,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -164,7 +164,7 @@ jobs:
 
       # Next's build cache: `.next/cache` is what makes a repeat typecheck fast.
       - name: Cache Next.js build cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4 (SHA-pinned; renovate bumps it)
         with:
           path: .next/cache
           key: ${{ runner.os }}-next-cache-${{ github.sha }}
@@ -225,10 +225,10 @@ jobs:
           --health-retries 12
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -237,7 +237,7 @@ jobs:
       # The Prisma client cache is keyed on the schema hash: change the schema
       # and the engine regenerates; change only app code and it does not.
       - name: Cache Prisma engines (keyed on schema hash)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4 (SHA-pinned; renovate bumps it)
         with:
           path: |
             node_modules/.prisma
@@ -333,10 +333,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -592,17 +592,17 @@ jobs:
       LOG_LEVEL: silent
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Cache Prisma engines (keyed on schema hash)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4 (SHA-pinned; renovate bumps it)
         with:
           path: |
             node_modules/.prisma
@@ -682,7 +682,7 @@ jobs:
 
       - name: Split the JUnit report per package
         if: always() && steps.tests.outputs.exists == 'true'
-        uses: mikepenz/action-junit-report@3585e9575db828022551b4231f165eb59a0e74e3 # v5 (SHA-pinned; renovate bumps it)
+        uses: mikepenz/action-junit-report@a9170d5795813c01ab4901ffb045b52bab4ab09d # v5 (SHA-pinned; renovate bumps it)
         with:
           report_paths: junit.xml
           check_name: vitest results
@@ -693,7 +693,7 @@ jobs:
 
       - name: Upload the JUnit report
         if: always() && steps.tests.outputs.exists == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; renovate bumps it)
         with:
           name: junit-test-report
           path: junit.xml
@@ -722,7 +722,7 @@ jobs:
       # every run since the tests landed. Two steps, one artifact name, one job.
       - name: Upload coverage (or the placeholder)
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; renovate bumps it)
         with:
           name: coverage-report
           path: coverage/
@@ -757,17 +757,17 @@ jobs:
       DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci?schema=public"
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Cache Prisma engines (keyed on schema hash)
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4 (SHA-pinned; renovate bumps it)
         with:
           path: |
             node_modules/.prisma
@@ -779,7 +779,7 @@ jobs:
       # The Next cache is keyed on the lockfile + source hash. A pure dependency
       # bump reuses the whole .next/cache; a source change busts it.
       - name: Cache Next.js build cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4 (SHA-pinned; renovate bumps it)
         with:
           path: .next/cache
           key: ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'prisma/**', 'next.config.ts') }}
@@ -834,7 +834,7 @@ jobs:
           echo "build output: $(du -sh .next | cut -f1)"
 
       - name: Upload the .next build artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; renovate bumps it)
         with:
           name: next-build-${{ github.sha }}
           path: .next
@@ -854,12 +854,12 @@ jobs:
     needs: [build]
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3 (SHA-pinned; renovate bumps it)
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v3 (SHA-pinned; renovate bumps it)
 
       - name: Build the image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6 (SHA-pinned; renovate bumps it)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v6 (SHA-pinned; renovate bumps it)
         with:
           context: .
           file: ./Dockerfile
@@ -914,7 +914,7 @@ jobs:
       # the network, unpinned, which is not something a verification step should
       # do.
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -1022,10 +1022,10 @@ jobs:
     needs: [docker-build]
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -1036,7 +1036,7 @@ jobs:
       # CI build artifact rather than rebuilding — it is the exact bytes that
       # would deploy.
       - name: Download the build artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4 (SHA-pinned; renovate bumps it)
         with:
           name: next-build-${{ github.sha }}
           path: .next
@@ -1128,7 +1128,7 @@ jobs:
 
       - name: Summarise and comment on the PR
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7 (SHA-pinned; renovate bumps it)
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7 (SHA-pinned; renovate bumps it)
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -1241,10 +1241,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (SHA-pinned; renovate bumps it)
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -1318,7 +1318,7 @@ jobs:
 
       - name: Upload the inventory JUnit report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; renovate bumps it)
         with:
           name: inventory-junit-report
           path: inventory-junit.xml

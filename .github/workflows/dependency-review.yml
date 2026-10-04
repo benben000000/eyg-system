@@ -51,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout the base commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
         with:
           # Only the history needed to diff the dependency graph. Without this
           # the action fetches the whole repo and the job takes 3x longer.
@@ -59,7 +59,7 @@ jobs:
           persist-credentials: false
 
       - name: Review the dependency changes
-        uses: actions/dependency-review-action@da24556b548a50705dd671f47852072ea4c105d9 # v4.7.1 (SHA-pinned; renovate bumps it)
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4.7.1 (SHA-pinned; renovate bumps it)
         with:
           fail-on-severity: high
           # Deny the licenses that would put this codebase in a legally

@@ -60,12 +60,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (SHA-pinned; renovate bumps it)
 
       # The languages property initialises the CodeQL extractor. Without it the
       # action fails with "no languages specified".
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3 (SHA-pinned; renovate bumps it)
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v3 (SHA-pinned; renovate bumps it)
         with:
           languages: ${{ matrix.language }}
           # The default `default` setup-mode builds the project with its own
@@ -98,10 +98,10 @@ jobs:
       # best-effort without a build step, and the number of false negatives
       # drops sharply when it can see the resolved module graph.
       - name: Autobuild
-        uses: github/codeql-action/autobuild@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3 (SHA-pinned; renovate bumps it)
+        uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v3 (SHA-pinned; renovate bumps it)
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3 (SHA-pinned; renovate bumps it)
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v3 (SHA-pinned; renovate bumps it)
         with:
           category: "/language:${{ matrix.language }}"
           # A new CodeQL query that fires on existing code would otherwise turn
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload the SARIF artifact
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (SHA-pinned; renovate bumps it)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4 (SHA-pinned; renovate bumps it)
         with:
           name: codeql-sarif-${{ matrix.language }}
           path: sarif-results/
