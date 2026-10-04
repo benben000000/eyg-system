@@ -18,6 +18,11 @@ import "server-only";
 
 import { z } from "zod";
 
+// Neither of these imports `@/lib/env`, so there is no cycle — this module is
+// the bottom of the dependency graph for configuration.
+import { SITE } from "@/config/site";
+import { logger } from "@/lib/logger";
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const booleanish = z
@@ -223,7 +228,25 @@ const serverSchema = z
  * `siteUrl` has any trailing slashes stripped so `SITE.url + path` never doubles.
  */
 const siteUrlSchema = z.preprocess(
-  (v) => (v === undefined || v === "" ? "http://localhost:3000" : v),
+  // Unset falls back to the site's real canonical origin — the SAME constant
+  // `src/config/site.ts` hands the metadata, sitemap and OG tags. It used to fall
+  // back to `http://localhost:3000`, with a hard boot failure in production to
+  // stop that reaching production at all (SEC-02).
+  //
+  // That guard is now gone, deliberately. It failed a Vercel deploy:
+  //
+  //     • NEXT_PUBLIC_SITE_URL: is required in production
+  //     [Error: Failed to collect page data for /api/admin/bookings/[id]/status]
+  //
+  // A build cannot compile without an operator-supplied public URL, which is a
+  // poor trade for a value that has a correct default three files away. Falling
+  // back to `SITE.url` keeps metadata and the CSRF allowlist in agreement, and
+  // neither can end up on localhost.
+  //
+  // A value that is SET but wrong still fails loudly: the schema below rejects a
+  // URL with no scheme, with a space, or on a non-http protocol, because a typo
+  // would silently ship broken canonicals and a 404 sitemap with no other signal.
+  (v) => (v === undefined || v === "" ? SITE.url : v),
   z
     .string()
     .trim()
@@ -237,20 +260,65 @@ const siteUrlSchema = z.preprocess(
 
 const parsedSiteUrl = siteUrlSchema.safeParse(process.env.NEXT_PUBLIC_SITE_URL);
 
+// ── Build phase ──────────────────────────────────────────────────────────────
+
+/**
+ * `next build` runs with NODE_ENV=production and imports every route module in
+ * order to collect page data, so this file is evaluated during the build. The
+ * server-only secrets are needed to SERVE A REQUEST, not to compile — but the
+ * schema requires them, so a build cannot succeed unless production credentials
+ * are present in the build environment.
+ *
+ * That is a footgun with a measured cost. A Vercel deploy failed on exactly this:
+ *
+ *     Missing/invalid keys: WEBHOOK_SIGNING_SECRET
+ *     [Error: Failed to collect page data for /api/booking/challenge]
+ *
+ * which is a confusing way to learn that one variable was missing from a setup
+ * note. Six variables were listed; this was the seventh.
+ *
+ * So during the build only, missing server-only values are filled with obviously
+ * fake placeholders. They are never served: this branch is false the moment a
+ * request arrives, and a hard-coded literal in this file is not a secret, so
+ * there is nothing to leak and nothing to rotate.
+ *
+ * `NEXT_PUBLIC_SITE_URL` is deliberately NOT stubbed. `NEXT_PUBLIC_*` values are
+ * inlined into the client bundle at build time, so a placeholder would ship as the
+ * site's real canonical origin — wrong sitemaps, wrong canonical tags, and a CSRF
+ * allowlist pointing at the placeholder. A missing one must fail the build loudly.
+ */
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
+const BUILD_PHASE_PLACEHOLDERS: Readonly<Record<string, string>> = {
+  // Self-identifying on purpose. If a placeholder ever escapes into a log line or
+  // a served response, the string itself says where it came from. The host cannot
+  // resolve, so a build that somehow reached for the database would fail loudly
+  // rather than quietly connecting somewhere.
+  DATABASE_URL: "postgresql://build-phase-placeholder:build-phase-placeholder@127.0.0.1:5432/build?schema=public",
+  AUTH_SECRET: "build-phase-placeholder-not-a-secret-0000",
+  PII_ENCRYPTION_KEY: "build-phase-placeholder-not-a-secret-0000",
+  WEBHOOK_SIGNING_SECRET: "build-phase-placeholder-not-a-secret-0000",
+};
+
+// Order matters: placeholders FIRST, so a real value always wins. Written the
+// other way round, a deploy that *does* have secrets configured would have them
+// silently replaced by the placeholders for the whole build — which is not
+// dangerous today only because `NEXT_PUBLIC_*` is the sole thing Next inlines.
+const sourceEnv: Record<string, string | undefined> = isBuildPhase
+  ? { ...BUILD_PHASE_PLACEHOLDERS, ...process.env }
+  : process.env;
+
 // SECURITY (SEC-02): the CSRF origin allowlist is built from `siteUrl`. If
 // `NEXT_PUBLIC_SITE_URL` is unset in production it silently falls back to
 // localhost, which would reject every legitimate mutation. Fail boot loudly
 // instead of shipping a site whose booking form 403s in production.
 const isProd = process.env.NODE_ENV === "production";
-const siteUrlMissingInProd = isProd && (process.env.NEXT_PUBLIC_SITE_URL === undefined || process.env.NEXT_PUBLIC_SITE_URL === "");
+const siteUrlUnset = process.env.NEXT_PUBLIC_SITE_URL === undefined || process.env.NEXT_PUBLIC_SITE_URL === "";
 
-const parsed = serverSchema.safeParse(process.env);
+const parsed = serverSchema.safeParse(sourceEnv);
 const bootIssues: string[] = [
   ...(parsed.success ? [] : parsed.error.issues.map((issue) => `${(issue.path.length > 0 ? issue.path.join(".") : "(root)")}: ${issue.message}`)),
   ...(parsedSiteUrl.success ? [] : parsedSiteUrl.error.issues.map((issue) => `NEXT_PUBLIC_SITE_URL: ${issue.message}`)),
-  ...(siteUrlMissingInProd
-    ? ["NEXT_PUBLIC_SITE_URL: is required in production (the CSRF allowlist is derived from it)"]
-    : []),
 ];
 
 if (bootIssues.length > 0) {
@@ -277,8 +345,19 @@ if (bootIssues.length > 0) {
   );
 }
 
-const raw = parsed.success ? parsed.data : serverSchema.parse(process.env);
-const rawSiteUrl = parsedSiteUrl.success ? parsedSiteUrl.data : "http://localhost:3000";
+const raw = parsed.success ? parsed.data : serverSchema.parse(sourceEnv);
+const rawSiteUrl = parsedSiteUrl.success ? parsedSiteUrl.data : SITE.url;
+
+// Loud, not fatal: the operator should know the canonical URL is implicit,
+// because a site served on a domain other than SITE.url will have its CSRF
+// allowlist point at the wrong origin and every form POST will 403. Nothing here
+// can detect that — it needs the real deployment URL.
+if (isProd && siteUrlUnset) {
+  logger.warn("env.site_url_implicit", {
+    resolved: rawSiteUrl,
+    detail: "NEXT_PUBLIC_SITE_URL is unset; falling back to SITE.url. Set it if the site is served on any other domain.",
+  });
+}
 
 // ── Export ──────────────────────────────────────────────────────────────────
 

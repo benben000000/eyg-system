@@ -237,6 +237,93 @@ describe("env-schema — fails closed", () => {
     },
   );
 
+  // ── The build must not demand secrets ──────────────────────────────────────
+  //
+  // A Vercel deploy failed on exactly this, and the log is why these tests exist:
+  //
+  //     • AUTH_SECRET: is required
+  //     • PII_ENCRYPTION_KEY: is required
+  //     • WEBHOOK_SIGNING_SECRET: is required
+  //     • NEXT_PUBLIC_SITE_URL: is required in production
+  //     [Error: Failed to collect page data for /api/admin/bookings/[id]/status]
+  //
+  // `next build` sets NODE_ENV=production and imports every route to collect page
+  // data, so this module is evaluated while COMPILING. None of those four values is
+  // needed to compile — three are runtime secrets and the fourth already has a
+  // correct default in `src/config/site.ts`. Requiring them made a first deploy fail
+  // on configuration the operator had not been told about yet.
+  describe("env-schema — a build compiles without secrets", () => {
+    const NO_SECRETS: Readonly<Record<string, string | undefined>> = {
+      NODE_ENV: "production",
+      NEXT_PHASE: "phase-production-build",
+      LOG_LEVEL: "info",
+    };
+
+    /**
+     * Explicitly unset, not merely absent. `loadEnvWith` restores the real
+     * process environment underneath the patch and Vitest loads `.env`, so a key
+     * left out of the patch inherits whatever the machine happens to have — which
+     * would make "no secrets" a lie and the test pass for the wrong reason.
+     */
+    const NO_SECRET_KEYS: Readonly<Record<string, undefined>> = {
+      DATABASE_URL: undefined,
+      AUTH_SECRET: undefined,
+      PII_ENCRYPTION_KEY: undefined,
+      WEBHOOK_SIGNING_SECRET: undefined,
+      NEXT_PUBLIC_SITE_URL: undefined,
+    };
+
+    it("loads during the build phase with no secrets set", async () => {
+      // Every secret is explicitly undefined, not merely absent from the patch:
+      // the harness restores the real process env underneath, and Vitest loads
+      // `.env`, so "absent" would silently inherit a real value.
+      const result = await loadEnvWith({ ...NO_SECRETS, ...NO_SECRET_KEYS });
+      expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    });
+
+    it("uses obviously-fake placeholders, so no real value is required to compile", async () => {
+      const result = await loadEnvWith({ ...NO_SECRETS, ...NO_SECRET_KEYS });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const env = result.module["env"] as Record<string, unknown>;
+      for (const key of ["authSecret", "piiEncryptionKey", "webhookSigningSecret", "databaseUrl"]) {
+        expect(String(env[key]), key).toContain("build-phase-placeholder");
+      }
+    });
+
+    it("STILL refuses to boot at runtime without the secrets", async () => {
+      // The whole safety of the build-phase escape rests on this. If a served
+      // process accepted the placeholders, the site would encrypt customer phone
+      // numbers with a literal published in this repository.
+      const result = await loadEnvWith({ ...NO_SECRETS, ...NO_SECRET_KEYS, NEXT_PHASE: undefined });
+      expect(result.ok, "a runtime boot with no secrets must fail").toBe(false);
+      if (result.ok) return;
+      for (const key of ["AUTH_SECRET", "PII_ENCRYPTION_KEY", "WEBHOOK_SIGNING_SECRET"]) {
+        expect(result.error.message, key).toContain(key);
+      }
+      expect(result.error.message).not.toContain("build-phase-placeholder");
+    });
+
+    it("does not let a placeholder overwrite a real secret during a build", async () => {
+      const result = await loadEnvWith({ ...VALID_PRODUCTION_ENV, NEXT_PHASE: "phase-production-build" });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const env = result.module["env"] as Record<string, unknown>;
+      expect(env["authSecret"]).toBe(STRONG_SECRET);
+      expect(env["piiEncryptionKey"]).toBe(STRONG_SECRET_2);
+      expect(env["webhookSigningSecret"]).not.toContain("build-phase-placeholder");
+    });
+
+    it("falls back to the canonical SITE.url, never localhost, when SITE_URL is unset", async () => {
+      const result = await loadEnvWith({ ...VALID_PRODUCTION_ENV, NEXT_PUBLIC_SITE_URL: undefined });
+      expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+      if (!result.ok) return;
+      const env = result.module["env"] as { siteUrl: string };
+      expect(env.siteUrl).toBe("https://eygtireautocare.ph");
+      expect(env.siteUrl).not.toContain("localhost");
+    });
+  });
+
   it("rejects a DATABASE_URL that is not a postgres connection string", async () => {
     const result = await loadEnvWith({ ...VALID_PRODUCTION_ENV, DATABASE_URL: "mysql://root@db/eyg" });
     expect(result.ok).toBe(false);

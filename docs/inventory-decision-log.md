@@ -962,3 +962,131 @@ accepts" goes stale the moment Vercel ships a key, and a stale allowlist that
 rejects a valid key is its own outage. When the fetch fails the check degrades to
 a short vendored floor plus a warning, rather than reporting a validation it did
 not perform.
+
+## 20. The first Vercel deploy failed because a build demanded secrets
+
+§19 removed a JSON comment key that had stopped Vercel validating `vercel.json`.
+The next deploy got past that and failed during the build:
+
+```text
+Error: Command "prisma generate && node scripts/generate-og.mjs && next build" exited with 1
+```
+
+```text
+• AUTH_SECRET: is required
+• PII_ENCRYPTION_KEY: is required
+• WEBHOOK_SIGNING_SECRET: is required
+• NEXT_PUBLIC_SITE_URL: is required in production (the CSRF allowlist is derived from it)
+[Error: Failed to collect page data for /api/admin/bookings/[id]/status]
+```
+
+All four at once. None of them was set on the project, because none of them was
+needed to compile.
+
+### 20.1 The actual defect
+
+`next build` sets `NODE_ENV=production` and imports every route module to collect
+page data. That means `src/lib/env.ts` — which throws at module load when its
+schema fails — is evaluated **while compiling**. So:
+
+- three **runtime secrets** had to be present in the **build** environment, purely
+  because the module that reads them is imported during compilation;
+- `NEXT_PUBLIC_SITE_URL` had to be present, with a **hard production failure**,
+  even though `src/config/site.ts` has carried `https://eygtireautocare.ph` as a
+  default the whole time (`process.env.NEXT_PUBLIC_SITE_URL ?? "https://eygtireautocare.ph"`).
+
+The second one is the design error. The first was defensible; the second was not.
+A build cannot compile unless an operator has already configured production
+secrets, which makes the very first deploy of a new project fail on the one thing
+the operator had not been told yet. It is also strictly stricter than the rest of
+the codebase, which is how the inconsistency survived.
+
+The origin of the hard failure is SEC-02, and the reasoning is recorded at the
+schema: an unset `NEXT_PUBLIC_SITE_URL` used to fall back to
+`http://localhost:3000`, and because the CSRF allowlist is derived from it
+(`middleware.ts` pushes `env.siteUrl`), every form POST would 403 in production.
+Failing boot was the right call **against a localhost fallback**. It was the wrong
+call against a fallback that is the correct domain.
+
+### 20.2 Two changes, both narrow
+
+**Server-only secrets are stubbed during the build, and only during the build.**
+
+`next build` sets `NEXT_PHASE=phase-production-build` — verified in
+`node_modules/next/dist/build/index.js`, not assumed. When that is set, missing
+server-only values are filled with self-identifying placeholders. They are never
+served: the branch is false the moment a request arrives, and a hard-coded literal
+in a source file is not a secret.
+
+**`NEXT_PUBLIC_SITE_URL` unset falls back to `SITE.url`, not localhost.**
+
+Same constant the metadata, sitemap and OG tags already use, so `document.head`
+canonical URLs and the CSRF allowlist cannot disagree, and neither can end up on
+localhost. A value that is **set but wrong** still fails loudly — no scheme, a
+space, or a non-http protocol are all rejected, because a typo would otherwise
+ship broken canonicals and a 404 sitemap with no other signal.
+
+SEC-02 still holds. The protection was never "the variable must be set", it was
+"the allowlist must not be localhost".
+
+### 20.3 The bug this nearly shipped
+
+The placeholders were written in the wrong order first:
+
+```ts
+{ ...process.env, ...BUILD_PHASE_PLACEHOLDERS }   // placeholders WIN — wrong
+{ ...BUILD_PHASE_PLACEHOLDERS, ...process.env }   // real values win — correct
+```
+
+As written, a deploy that *had* secrets configured would have had them silently
+replaced by the placeholders for the duration of the build. Harmless today only
+because `NEXT_PUBLIC_*` is the sole thing Next inlines — a fact worth not relying
+on.
+
+It was caught by the test written alongside the fix, not by review, and the test
+that caught it is in `tests/unit/env-schema.test.ts` under
+*"a build compiles without secrets"*.
+
+### 20.4 Verified, both directions
+
+```text
+build, zero env vars            SUCCEEDS — 70 routes emitted
+runtime, zero env vars          refuses to serve, names all three secrets
+                                no placeholder string in any output
+runtime, real secrets           serves, no placeholder in the HTML
+                                security headers still applied
+```
+
+The middle row is the one that matters. If a served process accepted the
+placeholders, the site would encrypt customer phone numbers with a literal
+published in this repository — which is a far worse outcome than not booting.
+Five tests hold that line, and the whole file passes: 415 unit tests.
+
+Reproducing this locally needed three attempts, and each earlier one failed
+quietly rather than loudly, which is worth recording:
+
+1. `set DATABASE_URL=` in cmd sets the variable to the **empty string**, it does
+   not unset it. Anything checking `=== undefined` sees a defined empty value.
+2. Next auto-loads `.env`, so "no environment" locally means "the developer's
+   real credentials" unless the file is moved aside.
+3. Moving only `.env` aside is not enough — **`.env.local` exists** and held
+   `WEBHOOK_SIGNING_SECRET`. That is why "the six variables I was told to set"
+   appeared sufficient locally when it never was, and why the first conclusion
+   drawn from it ("the env vars are not the cause") was wrong.
+
+### 20.5 What the operator still has to do
+
+The build no longer needs anything. **Serving** the site does:
+
+| variable                 | needed for                                        |
+| ------------------------ | ------------------------------------------------- |
+| `DATABASE_URL`           | Neon pooled URL                                   |
+| `DIRECT_URL`             | `prisma migrate deploy` only                      |
+| `AUTH_SECRET`            | sessions                                          |
+| `PII_ENCRYPTION_KEY`     | encrypting customer phone numbers                 |
+| `WEBHOOK_SIGNING_SECRET` | verifying Resend / Twilio / WhatsApp callbacks    |
+| `CRON_SECRET`            | the daily tick; not in the schema, read by the route |
+| `NEXT_PUBLIC_SITE_URL`   | only if the site is served on a domain other than `eygtireautocare.ph` |
+
+Until they are set the app refuses to start, which is correct and is now a much
+better error than a failed compile.
